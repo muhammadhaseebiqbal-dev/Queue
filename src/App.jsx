@@ -12,7 +12,7 @@ function App() {
   }
 
   return (
-    <div className="w-full h-screen flex">
+    <div className="w-full h-screen flex overflow-hidden">
       <Drawer {...PanelInteractionVars} />
       <ChatArea {...PanelInteractionVars} />
     </div>

@@ -13,10 +13,17 @@
     "@tailwindcss/vite": "^4.1.17",
     "axios": "^1.13.2",
     "framer-motion": "^12.23.25",
+    "highlight.js": "^11.11.1",
+    "katex": "^0.16.25",
     "lucide-react": "^0.556.0",
     "nanoid": "^5.1.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
     "tailwindcss": "^4.1.17"
   },
   "devDependencies": {
