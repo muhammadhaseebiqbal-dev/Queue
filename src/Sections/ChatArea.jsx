@@ -2,6 +2,8 @@ import { PanelRightOpen } from "lucide-react"
 import AiInput from "../components/ui/AiInput"
 import MarkdownRenderer from "../components/ui/MarkdownRenderer"
 import DeepMindProgress from "../components/ui/DeepMindProgress"
+import SearchStatus from "../components/ui/SearchStatus"
+import WeatherCard from "../components/ui/WeatherCard"
 import { motion } from "framer-motion"
 import { useState, useEffect, useRef } from "react"
 import axios from "axios"
@@ -16,18 +18,44 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
     const [isStreaming, setIsStreaming] = useState(false)
     const [selectedModel, setSelectedModel] = useState('gpt-oss-120b')
     const [isDeepMindEnabled, setIsDeepMindEnabled] = useState(false)
+    const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false)
     const [deepMindPhase, setDeepMindPhase] = useState(0)
     const [deepMindData, setDeepMindData] = useState({})
     const [userId] = useState(() => nanoid()) // Persist userId for the session
     const previousModel = useRef('gpt-oss-120b')
     const streamingMessageRef = useRef("")
     const eventSourceRef = useRef(null)
+    const messagesEndRef = useRef(null)
+
+    const scrollContainerRef = useRef(null)
+    const shouldAutoScrollRef = useRef(true)
+
+    // Handle scroll events to detect if user has scrolled up
+    const handleScroll = () => {
+        if (!scrollContainerRef.current) return;
+        const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+        // If user is within 100px of bottom, auto-scroll is enabled
+        const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
+        shouldAutoScrollRef.current = isAtBottom;
+    }
+
+    // Auto-scroll logic
+    useEffect(() => {
+        if (shouldAutoScrollRef.current) {
+            // Use 'auto' (instant) behavior during streaming to prevent stutter
+            // Use 'smooth' only when not streaming (e.g. new message added)
+            messagesEndRef.current?.scrollIntoView({
+                behavior: isStreaming ? 'auto' : 'smooth',
+                block: 'end'
+            });
+        }
+    }, [context, isStreaming])
 
     // Detect model change and add separator
     useEffect(() => {
         if (previousModel.current !== selectedModel && context.length > 0) {
-            setcontext(prev => [...prev, { 
-                role: "separator", 
+            setcontext(prev => [...prev, {
+                role: "separator",
                 content: `Model changed to ${selectedModel.toUpperCase().replace(/-/g, ' ')}`,
                 model: selectedModel
             }]);
@@ -123,14 +151,19 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                 if (data.type === 'done') {
                     eventSourceRef.current.close();
                     setIsStreaming(false);
-                    setDeepMindPhase(3);
-                    // Remove progress indicator and mark final message as complete
+                    setDeepMindPhase(4); // Mark as fully complete (phase 4)
+                    // Mark final message as complete but keep progress indicator
                     setcontext(prev => {
-                        const filtered = prev.filter(msg => msg.role !== 'deepmind-progress');
-                        if (filtered.length > 0) {
-                            filtered[filtered.length - 1].streaming = false;
+                        const updated = [...prev];
+                        if (updated.length > 0 && updated[updated.length - 1].role === 'system') {
+                            updated[updated.length - 1].streaming = false;
                         }
-                        return filtered;
+                        // Mark progress as complete
+                        const progressIndex = updated.findIndex(msg => msg.role === 'deepmind-progress');
+                        if (progressIndex !== -1) {
+                            updated[progressIndex] = { ...updated[progressIndex], complete: true };
+                        }
+                        return updated;
                     });
                 }
 
@@ -185,7 +218,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
         try {
             // Set chat as started
             setIsChatStarted(true);
-            
+
             // Add user message to context
             setcontext(prev => [...prev, { role: "user", content: promptInput }]);
             setpromptInput("");
@@ -195,13 +228,20 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                 message: promptInput,
                 userId: userId,
                 model: selectedModel,
+                isWebSearchEnabled: isWebSearchEnabled,
                 messages: [{ role: "user", content: promptInput }]
             });
 
             const { streamId } = response.data;
 
             // Add empty system message for streaming
-            setcontext(prev => [...prev, { role: "system", content: "" }]);
+            setcontext(prev => [...prev, {
+                role: "system",
+                content: "",
+                searchStatus: isWebSearchEnabled ? 'searching' : null,
+                searchLogs: [],
+                searchSources: []
+            }]);
             setIsStreaming(true);
             streamingMessageRef.current = "";
 
@@ -214,6 +254,14 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                 if (data.done) {
                     eventSourceRef.current.close();
                     setIsStreaming(false);
+                    // Mark search as done if it was active
+                    setcontext(prev => {
+                        const updated = [...prev];
+                        if (updated.length > 0 && updated[updated.length - 1].searchStatus === 'searching') {
+                            updated[updated.length - 1].searchStatus = 'done';
+                        }
+                        return updated;
+                    });
                     return;
                 }
 
@@ -224,16 +272,78 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                     return;
                 }
 
-                if (data.content) {
-                    streamingMessageRef.current += data.content;
-                    
+                // Handle Search Events
+                if (data.type === 'search_start') {
+                    setcontext(prev => {
+                        const updated = [...prev];
+                        const lastMsg = updated[updated.length - 1];
+                        if (lastMsg.role === 'system') {
+                            lastMsg.searchStatus = 'searching';
+                            // If backend signals auto search, flag it
+                            if (data.isAuto) lastMsg.isAutoSearch = true;
+                        }
+                        return updated;
+                    });
+                }
+
+                if (data.type === 'search_progress') {
+                    setcontext(prev => {
+                        const updated = [...prev];
+                        const lastMsg = updated[updated.length - 1];
+                        if (lastMsg.role === 'system') {
+                            lastMsg.searchLogs = [...(lastMsg.searchLogs || []), data.message];
+                        }
+                        return updated;
+                    });
+                }
+
+                if (data.type === 'search_source') {
+                    setcontext(prev => {
+                        const updated = [...prev];
+                        const lastMsg = updated[updated.length - 1];
+                        if (lastMsg.role === 'system') {
+                            lastMsg.searchSources = [...(lastMsg.searchSources || []), data.source];
+                        }
+                        return updated;
+                    });
+                }
+
+                if (data.type === 'weather_data') {
+                    setcontext(prev => {
+                        const updated = [...prev];
+                        const lastMsg = updated[updated.length - 1];
+                        if (lastMsg.role === 'system') {
+                            lastMsg.weatherData = data.data;
+                        }
+                        return updated;
+                    });
+                }
+
+                if (data.type === 'weather_data') {
+                    setcontext(prev => {
+                        const updated = [...prev];
+                        const lastMsg = updated[updated.length - 1];
+                        if (lastMsg.role === 'system') {
+                            lastMsg.weatherData = data.data;
+                        }
+                        return updated;
+                    });
+                }
+
+                if (data.content || (data.type === 'content' && data.content)) {
+                    // Handle both simple {content: "..."} and typed {type: "content", content: "..."}
+                    const newContent = data.content || (data.type === 'content' ? data.content : "");
+                    streamingMessageRef.current += newContent;
+
                     // Update the last message with streamed content in real-time
                     setcontext(prev => {
                         const updated = [...prev];
                         updated[updated.length - 1] = {
-                            role: "system",
+                            ...updated[updated.length - 1],
                             content: streamingMessageRef.current,
-                            streaming: true // Flag to indicate streaming state
+                            streaming: true,
+                            // Ensure search status is done once content starts flowing
+                            searchStatus: updated[updated.length - 1].searchStatus === 'searching' ? 'done' : updated[updated.length - 1].searchStatus
                         };
                         return updated;
                     });
@@ -332,6 +442,8 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
 
             {/* Message Bubble Area */}
             <motion.div
+                ref={scrollContainerRef}
+                onScroll={handleScroll}
                 animate={{
                     height: isChatStarted ? '80%' : '0%',
                     opacity: isChatStarted ? 1 : 0
@@ -370,24 +482,45 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                         }
 
                         // Render regular messages
+                        // Render regular messages
                         return (
-                            <motion.div
-                                key={index}
-                                className={`text-text p-4 rounded-2xl mb-3 ${ 
-                                    node.role == "user" 
-                                        ? 'bg-secondary ml-auto w-fit max-w-[80%]' 
-                                        : 'bg-tertiary mr-auto w-[85%]'
-                                }`}
-                            >
-                                {node.role === "user" ? (
-                                    <p className="text-text whitespace-pre-wrap">{node.content}</p>
-                                ) : (
-                                    <MarkdownRenderer content={node.content} streaming={node.streaming} />
+                            <div key={index} className="flex flex-col w-full mb-4">
+                                {/* Weather Card - Full Width */}
+                                {node.weatherData && (
+                                    <div className="w-full">
+                                        <WeatherCard data={node.weatherData} />
+                                    </div>
                                 )}
-                            </motion.div>
+
+                                {/* Search Status - Full Width */}
+                                {node.searchStatus && (
+                                    <div className="w-full mb-2">
+                                        <SearchStatus
+                                            status={node.searchStatus}
+                                            logs={node.searchLogs || []}
+                                            sources={node.searchSources || []}
+                                            isAuto={node.isAutoSearch}
+                                        />
+                                    </div>
+                                )}
+
+                                <motion.div
+                                    className={`text-text p-4 rounded-2xl ${node.role == "user"
+                                        ? 'bg-secondary ml-auto w-fit max-w-[80%]'
+                                        : 'mr-auto w-full'
+                                        }`}
+                                >
+                                    {node.role === "user" ? (
+                                        <p className="text-text whitespace-pre-wrap">{node.content}</p>
+                                    ) : (
+                                        <MarkdownRenderer content={node.content} streaming={node.streaming} />
+                                    )}
+                                </motion.div>
+                            </div>
                         )
                     })
                 }
+                <div ref={messagesEndRef} />
             </motion.div>
 
             {/* Input Area */}
@@ -395,17 +528,19 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                 layout
                 className="w-full flex justify-center items-center"
             >
-                <AiInput 
-                    promptInput={promptInput} 
-                    setpromptInput={setpromptInput} 
-                    setIsChatStarted={setIsChatStarted} 
-                    isChatStarted={isChatStarted} 
-                    isSendPrompt={isSendPrompt} 
+                <AiInput
+                    promptInput={promptInput}
+                    setpromptInput={setpromptInput}
+                    setIsChatStarted={setIsChatStarted}
+                    isChatStarted={isChatStarted}
+                    isSendPrompt={isSendPrompt}
                     setIsSendPrompt={setIsSendPrompt}
                     selectedModel={selectedModel}
                     setSelectedModel={setSelectedModel}
                     isDeepMindEnabled={isDeepMindEnabled}
                     setIsDeepMindEnabled={setIsDeepMindEnabled}
+                    isWebSearchEnabled={isWebSearchEnabled}
+                    setIsWebSearchEnabled={setIsWebSearchEnabled}
                 />
             </motion.div>
         </motion.div>

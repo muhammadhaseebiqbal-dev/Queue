@@ -1,10 +1,16 @@
 import express from "express";
 import dotenv from "dotenv";
 import { Groq } from 'groq-sdk';
+
 import cors from 'cors';
 
-dotenv.config();
+import { performSearch } from './utils/search.js';
+import { detectSearchIntent } from './utils/intent.js';
+import { getWeatherData } from './utils/weather.js';
+
+dotenv.config({ override: true });
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
 
 const app = express()
 app.use(cors());
@@ -18,9 +24,11 @@ const deepMindSessions = {}; // Store DeepMind processing sessions
 const MAX_CONTEXT_TOKENS = 4000;
 const CONTEXT_WARNING_THRESHOLD = 3000;
 
-// DeepMind: Helper to select random models
+// DeepMind: Helper to select random models (excludes non-Groq models like Gemini)
 function selectRandomModels(count = 3, exclude = []) {
-    const allModels = Object.keys(MODEL_CONFIGS).filter(m => !exclude.includes(m));
+    const allModels = Object.keys(MODEL_CONFIGS).filter(m =>
+        !exclude.includes(m) && !MODEL_CONFIGS[m].provider // Only include Groq models
+    );
     const shuffled = allModels.sort(() => 0.5 - Math.random());
     return shuffled.slice(0, Math.min(count, shuffled.length));
 }
@@ -89,7 +97,7 @@ async function summarizeContext(messages, modelKey = 'llama-3.3-70b') {
 // Save or update chat context
 app.post('/context/save', (req, res) => {
     const { userId, messages } = req.body;
-    
+
     if (!userId || !messages) {
         return res.status(400).json({ error: 'userId and messages are required' });
     }
@@ -100,8 +108,8 @@ app.post('/context/save', (req, res) => {
         tokenCount: getContextSize(messages)
     };
 
-    res.json({ 
-        success: true, 
+    res.json({
+        success: true,
         tokenCount: chatContexts[userId].tokenCount,
         needsSummarization: chatContexts[userId].tokenCount > CONTEXT_WARNING_THRESHOLD
     });
@@ -158,7 +166,8 @@ const MODEL_CONFIGS = {
         temperature: 0.6,
         max_completion_tokens: 4096,
         top_p: 1
-    }
+    },
+
 };
 
 // Get available models endpoint
@@ -177,7 +186,7 @@ app.post('/prepare-stream', async (req, res) => {
 
     // Get stored context and merge with current messages
     let contextMessages = messages || [];
-    
+
     if (userId && chatContexts[userId]) {
         const storedContext = chatContexts[userId];
         const contextSize = storedContext.tokenCount;
@@ -186,7 +195,7 @@ app.post('/prepare-stream', async (req, res) => {
         if (contextSize > MAX_CONTEXT_TOKENS) {
             console.log(`Context too large (${contextSize} tokens), summarizing...`);
             const summary = await summarizeContext(storedContext.messages);
-            
+
             if (summary) {
                 // Replace old context with summary
                 contextMessages = [
@@ -209,7 +218,7 @@ app.post('/prepare-stream', async (req, res) => {
 
 app.get('/stream/:id', async (req, res) => {
     const payload = store[req.params.id];
-    
+
     if (!payload) {
         res.status(404).json({ error: 'Stream not found' });
         return;
@@ -238,8 +247,8 @@ app.get('/stream/:id', async (req, res) => {
 
         // Add system prompt for LaTeX rendering if not already present
         const hasSystemPrompt = cleanedMessages.some(msg => msg.role === 'system');
-        const finalMessages = hasSystemPrompt 
-            ? cleanedMessages 
+        let finalMessages = hasSystemPrompt
+            ? cleanedMessages
             : [
                 {
                     role: 'system',
@@ -248,10 +257,123 @@ app.get('/stream/:id', async (req, res) => {
                 ...cleanedMessages
             ];
 
-        // Get model config, default to llama-3.3-70b
-        const modelKey = payload.model || 'llama-3.3-70b';
+        // Logic for Intelligent Search Routing
+        let shouldSearch = false;
+        let shouldWeather = false;
+        let modelKey = payload.model || 'llama-3.3-70b'; // Default model
+
+        // Case 1: Explicit Web Search Enabled (Force GPT-OSS-120B)
+        if (payload.isWebSearchEnabled) {
+            console.log("Explicit Web Search Enabled - Forcing gpt-oss-120b");
+            shouldSearch = true;
+            modelKey = 'gpt-oss-120b'; // Force model override
+        }
+        // Case 2: Intelligent Auto-Detection (If DeepMind is OFF and Explicit is OFF)
+        else if (!payload.isDeepMindEnabled) {
+            // Check for intent (Returns { category, location })
+            const intentData = await detectSearchIntent(payload.message || finalMessages[finalMessages.length - 1].content);
+            const intent = intentData.category;
+
+            if (intent === "SEARCH") {
+                console.log("Intent: SEARCH - Enabling Auto-Search");
+                shouldSearch = true;
+                res.write(`data: ${JSON.stringify({ type: 'search_start', isAuto: true })}\n\n`);
+                res.write(`data: ${JSON.stringify({ type: 'search_progress', message: "Thinking..." })}\n\n`);
+                res.write(`data: ${JSON.stringify({ type: 'search_progress', message: "I think this needs real-time info. Searching..." })}\n\n`);
+            } else if (intent === "WEATHER") {
+                console.log(`Intent: WEATHER - Fetching Weather Data for ${intentData.location}`);
+                shouldWeather = true;
+                res.write(`data: ${JSON.stringify({ type: 'search_start', isAuto: true })}\n\n`); // Reuse start event for UI badge
+                res.write(`data: ${JSON.stringify({ type: 'search_progress', message: `Checking forecast for ${intentData.location}...` })}\n\n`);
+
+                // Pass the extracted location, not the full query
+                var weatherLocation = intentData.location;
+            }
+        }
+
+        // Execute Weather Strategy
+        if (shouldWeather) {
+            const queryLocation = weatherLocation || payload.message || finalMessages[finalMessages.length - 1].content;
+            const weatherData = await getWeatherData(queryLocation);
+
+            if (weatherData) {
+                // Stream structured data for UI Card
+                res.write(`data: ${JSON.stringify({ type: 'weather_data', data: weatherData })}\n\n`);
+
+                // Construct context for LLM
+                const weatherContext = `
+                CURRENT WEATHER DATA for ${weatherData.location.name}, ${weatherData.location.country}:
+                - Condition Code: ${weatherData.current.weather_code}
+                - Temperature: ${weatherData.current.temperature}°C
+                - Feels Like: ${weatherData.current.feels_like}°C
+                - Humidity: ${weatherData.current.humidity}%
+                - Wind Speed: ${weatherData.current.wind_speed} km/h
+                
+                FORECAST:
+                ${weatherData.daily.map(d => `- ${d.date}: Max ${d.temp_max}°C, Min ${d.temp_min}°C`).join('\n')}
+                
+                INSTRUCTIONS:
+                - Present the weather in a friendly, conversational way.
+                - Mention the current condition and specifically the "feels like" temp if different.
+                - Give a quick summary of the upcoming forecast.
+                `;
+
+                // Insert context
+                const systemContextMsg = {
+                    role: 'system',
+                    content: weatherContext
+                };
+                finalMessages.splice(finalMessages.length - 1, 0, systemContextMsg);
+                res.write(`data: ${JSON.stringify({ type: 'search_progress', message: "Weather data acquired." })}\n\n`);
+
+            } else {
+                res.write(`data: ${JSON.stringify({ type: 'search_progress', message: "Could not find weather location." })}\n\n`);
+            }
+        }
+
+        // Execute Search Strategy
+        if (shouldSearch) {
+            const userQuery = payload.message || finalMessages[finalMessages.length - 1].content;
+
+            // If explicit, we trigger the start event now (Auto already did above)
+            if (payload.isWebSearchEnabled) {
+                res.write(`data: ${JSON.stringify({ type: 'search_start' })}\n\n`);
+            }
+
+            res.write(`data: ${JSON.stringify({ type: 'search_progress', message: `Searching for: "${userQuery.substring(0, 30)}..."` })}\n\n`);
+
+            const searchResults = await performSearch(userQuery);
+
+            if (searchResults && searchResults.length > 0) {
+                res.write(`data: ${JSON.stringify({ type: 'search_progress', message: `Found ${searchResults.length} sources` })}\n\n`);
+
+                // Stream sources to frontend
+                for (const source of searchResults) {
+                    res.write(`data: ${JSON.stringify({ type: 'search_source', source })}\n\n`);
+                }
+
+                // Construct search context
+                const searchContext = searchResults.map((r, i) =>
+                    `Source ${i + 1} (${r.title}): ${r.snippet}\nURL: ${r.link}`
+                ).join('\n\n');
+
+                const systemContextMsg = {
+                    role: 'system',
+                    content: `Here is real-time information from the web to help answer the user's question:\n\n${searchContext}\n\nPlease use this information to provide an up-to-date and accurate answer. Cite your sources if relevant.`
+                };
+
+                // Insert search context before the last user message
+                finalMessages.splice(finalMessages.length - 1, 0, systemContextMsg);
+
+            } else {
+                res.write(`data: ${JSON.stringify({ type: 'search_progress', message: "No relevant results found." })}\n\n`);
+            }
+        }
+
+        // Get model config
         const config = MODEL_CONFIGS[modelKey] || MODEL_CONFIGS['llama-3.3-70b'];
 
+        // Use Groq for all models
         const chatCompletion = await groq.chat.completions.create({
             messages: finalMessages,
             model: config.model,
@@ -272,7 +394,7 @@ app.get('/stream/:id', async (req, res) => {
 
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
         res.end();
-        
+
         // Clean up store
         delete store[req.params.id];
     } catch (error) {
@@ -295,7 +417,7 @@ app.post('/deepmind/prepare', async (req, res) => {
     } else if (messages) {
         contextMessages = messages;
     }
-    
+
     if (userId && chatContexts[userId]) {
         const storedContext = chatContexts[userId];
         const contextSize = storedContext.tokenCount;
@@ -303,7 +425,7 @@ app.post('/deepmind/prepare', async (req, res) => {
         if (contextSize > MAX_CONTEXT_TOKENS) {
             console.log(`Context too large (${contextSize} tokens), summarizing...`);
             const summary = await summarizeContext(storedContext.messages);
-            
+
             if (summary) {
                 contextMessages = [
                     {
@@ -360,8 +482,8 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
     try {
         // Add system prompt if needed
         const hasSystemPrompt = session.messages.some(msg => msg.role === 'system');
-        const finalMessages = hasSystemPrompt 
-            ? session.messages 
+        const finalMessages = hasSystemPrompt
+            ? session.messages
             : [
                 {
                     role: 'system',
@@ -370,9 +492,9 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
                 ...session.messages
             ];
 
-        // PHASE 1: Query 3 random models
+        // PHASE 1: Query 2 random models
         session.phase = 1;
-        session.phase1Models = selectRandomModels(3);
+        session.phase1Models = selectRandomModels(2);
         res.write(`data: ${JSON.stringify({ type: 'phase', phase: 1, models: session.phase1Models })}\n\n`);
 
         for (const modelKey of session.phase1Models) {
@@ -383,17 +505,29 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
 
         // PHASE 2: Send phase 1 responses to 3 different models for validation
         session.phase = 2;
-        session.phase2Models = selectRandomModels(3, session.phase1Models);
+        // Get all unused models first, then add one from phase 1 if we need more
+        const unusedModels = Object.keys(MODEL_CONFIGS).filter(m => !session.phase1Models.includes(m));
+        session.phase2Models = unusedModels.length >= 3
+            ? selectRandomModels(3, session.phase1Models)
+            : [...unusedModels, session.phase1Models[0]]; // Add one phase1 model if needed
         res.write(`data: ${JSON.stringify({ type: 'phase', phase: 2, models: session.phase2Models })}\n\n`);
 
-        const phase2Prompt = `Here are responses from multiple AI models to a user query. Analyze them and provide your own comprehensive answer:\n\n${session.phase1Responses.map((r, i) => `Response ${i + 1}:\n${r.response}`).join('\n\n---\n\n')}\n\nNow provide your own well-reasoned answer to the original query.`;
+        // Create individual prompts for each phase2 model to validate specific phase1 responses
+        for (let i = 0; i < session.phase2Models.length; i++) {
+            const modelKey = session.phase2Models[i];
 
-        const phase2Messages = [
-            ...finalMessages,
-            { role: 'assistant', content: phase2Prompt }
-        ];
+            // Give each validator a concise view of phase 1 responses
+            const phase2Prompt = `Analyze these AI responses and provide a comprehensive answer:
 
-        for (const modelKey of session.phase2Models) {
+${session.phase1Responses.map((r, idx) => `${idx + 1}. ${r.response.substring(0, 1500)}${r.response.length > 1500 ? '...' : ''}`).join('\n\n')}
+
+Provide your own well-reasoned answer synthesizing the best insights.`;
+
+            const phase2Messages = [
+                ...finalMessages.slice(-2), // Only use last 2 messages to save tokens
+                { role: 'assistant', content: phase2Prompt }
+            ];
+
             const response = await getModelCompletion(modelKey, phase2Messages);
             session.phase2Responses.push({ model: modelKey, response });
             res.write(`data: ${JSON.stringify({ type: 'phase2_complete', model: modelKey, response })}\n\n`);
@@ -403,14 +537,30 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
         session.phase = 3;
         res.write(`data: ${JSON.stringify({ type: 'phase', phase: 3, models: ['gpt-oss-120b'] })}\n\n`);
 
-        const synthesisPrompt = `You are synthesizing the final answer from multiple AI model responses. Here are the validated responses:\n\n${session.phase2Responses.map((r, i) => `Analysis ${i + 1}:\n${r.response}`).join('\n\n---\n\n')}\n\nProvide a comprehensive, accurate final answer that incorporates the best insights from all responses.`;
+        // Send phase3_start signal immediately to show UI progress
+        res.write(`data: ${JSON.stringify({ type: 'phase3_start' })}\n\n`);
 
+        // Use concise synthesis prompt with truncated responses to stay under token limit
+        const synthesisPrompt = `Synthesize this into a final comprehensive answer:
+
+${session.phase2Responses.map((r, i) => `${i + 1}. ${r.response.substring(0, 1200)}${r.response.length > 1200 ? '...' : ''}`).join('\n\n')}
+
+Provide the final answer incorporating the best insights.`;
+
+        // Use only the original user query + synthesis prompt to minimize tokens
+        const originalUserMessage = finalMessages.find(m => m.role === 'user');
         const synthesisMessages = [
-            ...finalMessages,
+            {
+                role: 'system',
+                content: 'You are a helpful AI assistant. Synthesize multiple expert analyses into a clear, comprehensive answer.'
+            },
+            originalUserMessage || finalMessages[finalMessages.length - 1],
             { role: 'assistant', content: synthesisPrompt }
         ];
 
-        // Stream the final synthesis
+        // Stream the final synthesis - send initial content event to start streaming UI immediately
+        res.write(`data: ${JSON.stringify({ type: 'content', content: '' })}\n\n`);
+
         const config = MODEL_CONFIGS['gpt-oss-120b'];
         const finalCompletion = await groq.chat.completions.create({
             messages: synthesisMessages,
@@ -432,7 +582,7 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
 
         res.write(`data: ${JSON.stringify({ type: 'done', done: true })}\n\n`);
         res.end();
-        
+
         // Clean up
         delete deepMindSessions[sessionId];
     } catch (error) {
