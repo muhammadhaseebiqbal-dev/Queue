@@ -1,8 +1,22 @@
 import { motion } from "framer-motion"
-import { Search, CheckCircle, Globe, ExternalLink } from "lucide-react"
+import { Search, CheckCircle, Globe, ExternalLink, Sparkles } from "lucide-react"
 
 function SearchStatus({ status, logs, sources, isAuto }) {
     if (!status && sources.length === 0) return null;
+
+    const getStatusText = () => {
+        if (status === 'searching') {
+            const lastLog = logs[logs.length - 1];
+            if (lastLog && lastLog.toLowerCase().includes("enhancing")) {
+                return "Enhancing prompt...";
+            }
+            if (lastLog && lastLog.toLowerCase().includes("generating")) {
+                return "Generating image...";
+            }
+            return "Searching the web...";
+        }
+        return "Finished task";
+    };
 
     return (
         <div className="w-full mb-4 p-4 bg-tertiary/20 border border-border/50 rounded-2xl backdrop-blur-sm">
@@ -13,39 +27,31 @@ function SearchStatus({ status, logs, sources, isAuto }) {
                         animate={{ rotate: 360 }}
                         transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
                     >
-                        <Search size={18} />
+                        {logs.some(l => l.includes("Enhancing") || l.includes("Generating")) ?
+                            <Sparkles size={18} className="text-purple-400" /> :
+                            <Globe size={18} className="text-blue-400" />
+                        }
                     </motion.div>
                 ) : (
                     <CheckCircle size={18} className="text-secondary" />
                 )}
                 <span className="text-sm font-medium flex items-center gap-2">
-                    {status === 'searching' ? "Searching the web..." : "Finished searching"}
-                    {isAuto && (
-                        <span className="px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-[10px] font-bold text-blue-400 tracking-wide uppercase">
-                            ✨ Auto
-                        </span>
-                    )}
+                    {getStatusText()}
                 </span>
             </div>
 
-            {/* Timeline Logs (Only show during search) */}
+            {/* Log Status (Single Line) */}
             {logs.length > 0 && status === 'searching' && (
-                <div className="relative pl-4 space-y-4 mb-4">
-                    {/* Vertical Line */}
-                    <div className="absolute left-[5px] top-1 bottom-1 w-0.5 bg-border/50 rounded-full" />
-
-                    {logs.map((log, i) => (
-                        <motion.div
-                            key={i}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="relative pl-6"
-                        >
-                            {/* Timeline Dot */}
-                            <div className="absolute left-[-15px] top-1.5 w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-tertiary" />
-                            <p className="text-sm text-textLight/90">{log}</p>
-                        </motion.div>
-                    ))}
+                <div className="flex items-center gap-3 text-xs text-textLight/70 px-1">
+                    <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" />
+                    <motion.p
+                        key={logs[logs.length - 1]} // Trigger animation on change
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="truncate"
+                    >
+                        {logs[logs.length - 1]}
+                    </motion.p>
                 </div>
             )}
 

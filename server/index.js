@@ -8,13 +8,21 @@ import { performSearch } from './utils/search.js';
 import { detectSearchIntent } from './utils/intent.js';
 import { getWeatherData } from './utils/weather.js';
 
+import { parseFileContent } from './utils/fileParser.js';
+import multer from 'multer';
+import fs from 'fs'; // Required for Groq audio API (file stream) OR we can use buffer if SDK supports it? 
+// Wait, user said "dont use fs to store file use only the memory record sound in memory and directly pass."
+// Groq SDK `client.audio.transcriptions.create` expects a `file` argument which can be `(filename, buffer)`.
+// So we don't need fs to write to disk, but might need it for types if TS, but this is JS.
+// We need imports.
+
 dotenv.config({ override: true });
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 
 const app = express()
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '100mb' })); // Increase limit for file uploads
 
 const store = {};
 const chatContexts = {}; // Store conversation contexts by userId
@@ -108,6 +116,10 @@ app.post('/context/save', (req, res) => {
         tokenCount: getContextSize(messages)
     };
 
+    // Debug: Check if hiddenContent is being saved
+    const hasHidden = messages.some(m => m.hiddenContent);
+    if (hasHidden) console.log(`[Context Save] Saved context with hiddenContent for user ${userId.substring(0, 5)}...`);
+
     res.json({
         success: true,
         tokenCount: chatContexts[userId].tokenCount,
@@ -167,11 +179,49 @@ const MODEL_CONFIGS = {
         max_completion_tokens: 4096,
         top_p: 1
     },
+    'llama-4-maverick': {
+        model: 'meta-llama/llama-4-maverick-17b-128e-instruct',
+        temperature: 1,
+        max_completion_tokens: 1024,
+        top_p: 1
+    }
 
 };
 
-// Get available models endpoint
-app.get('/models', (req, res) => {
+// Multer setup for in-memory storage
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Endpoint: Speech-to-Text (Whisper)
+app.post('/transcribe', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No audio file uploaded.' });
+        }
+
+        console.log(`[Transcribe] Processing audio: ${req.file.originalname} (${req.file.size} bytes)`);
+
+        // Groq expects a File-like object with specific structure
+        // Create a proper file object from the buffer
+        const transcription = await groq.audio.transcriptions.create({
+            file: new File([req.file.buffer], req.file.originalname, {
+                type: req.file.mimetype || 'audio/webm'
+            }),
+            model: "whisper-large-v3-turbo",
+            temperature: 0,
+            response_format: "verbose_json",
+        });
+
+        console.log(`[Transcribe] Success: "${transcription.text.substring(0, 50)}..."`);
+        res.json({ text: transcription.text });
+
+    } catch (error) {
+        console.error('[Transcribe] Error:', error);
+        res.status(500).json({ error: 'Transcription failed.', details: error.message });
+    }
+});
+
+// Endpoint: List available models
+app.get('/models', async (req, res) => {
     const models = Object.keys(MODEL_CONFIGS).map(key => ({
         id: key,
         name: key.toUpperCase().replace(/-/g, ' '),
@@ -238,11 +288,20 @@ app.get('/stream/:id', async (req, res) => {
         ];
 
         // Clean messages: remove frontend-only properties like 'streaming', 'model', etc.
+        // Clean messages: remove frontend-only properties and ephemeral system messages
         const cleanedMessages = messages
-            .filter(msg => msg.role !== 'separator') // Remove separator messages
+            .filter(msg => {
+                if (msg.role === 'separator') return false;
+                // Filter out persisted ephemeral system messages
+                if (msg.role === 'system') {
+                    if (msg.content.includes("[SEARCH RESULTS")) return false;
+                    if (msg.content.includes("CURRENT WEATHER DATA")) return false;
+                }
+                return true;
+            })
             .map(msg => ({
                 role: msg.role,
-                content: msg.content
+                content: msg.hiddenContent || msg.content // Use hiddenContent if available (for full context)
             }));
 
         // Add system prompt for LaTeX rendering if not already present
@@ -260,7 +319,46 @@ app.get('/stream/:id', async (req, res) => {
         // Logic for Intelligent Search Routing
         let shouldSearch = false;
         let shouldWeather = false;
+        let weatherLocation = null; // Declare here so it's accessible but request-scoped
         let modelKey = payload.model || 'llama-3.3-70b'; // Default model
+
+        let attachmentContext = "";
+
+        // Handle File Attachment
+        if (payload.attachment) {
+            // Case A: Image -> Switch to Vision Model
+            if (payload.attachment.type.startsWith('image/')) {
+                console.log("Attachment is Image - Switching to Vision Model (Llama-4 Maverick)");
+                modelKey = 'llama-4-maverick';
+
+                // Add Image to User Message (Groq Vision Format)
+                const lastMsg = finalMessages[finalMessages.length - 1];
+                if (lastMsg.role === 'user') {
+                    lastMsg.content = [
+                        { type: "text", text: lastMsg.content || "Analyze this image." },
+                        { type: "image_url", image_url: { url: payload.attachment.content } }
+                    ];
+                }
+            }
+            // Case B: Document (PDF/Docs/CSV/Text) -> Parse and Inject Context
+            else {
+                console.log(`Attachment is Document (${payload.attachment.name}) - Parsing content...`);
+
+                // Decode base64 buffer for parser
+                const buffer = Buffer.from(payload.attachment.content.split(',')[1], 'base64');
+                const parsedText = await parseFileContent({
+                    buffer,
+                    mimetype: payload.attachment.type,
+                    originalname: payload.attachment.name
+                });
+
+                if (parsedText) {
+                    attachmentContext = `\n\n---\n[ATTACHED FILE: ${payload.attachment.name}]\n${parsedText.slice(0, 50000)}\n---\n`; // Cap at 50k chars to be safe
+                    console.log(`Parsed ${parsedText.length} chars from ${payload.attachment.name}`);
+                }
+            }
+        }
+
 
         // Case 1: Explicit Web Search Enabled (Force GPT-OSS-120B)
         if (payload.isWebSearchEnabled) {
@@ -270,8 +368,8 @@ app.get('/stream/:id', async (req, res) => {
         }
         // Case 2: Intelligent Auto-Detection (If DeepMind is OFF and Explicit is OFF)
         else if (!payload.isDeepMindEnabled) {
-            // Check for intent (Returns { category, location })
-            const intentData = await detectSearchIntent(payload.message || finalMessages[finalMessages.length - 1].content);
+            // Check for intent (Pass full message history for context)
+            const intentData = await detectSearchIntent(payload.messages || payload.message || finalMessages[finalMessages.length - 1].content);
             const intent = intentData.category;
 
             if (intent === "SEARCH") {
@@ -287,7 +385,89 @@ app.get('/stream/:id', async (req, res) => {
                 res.write(`data: ${JSON.stringify({ type: 'search_progress', message: `Checking forecast for ${intentData.location}...` })}\n\n`);
 
                 // Pass the extracted location, not the full query
-                var weatherLocation = intentData.location;
+                weatherLocation = intentData.location;
+                console.log(`Intent: WEATHER - Location: ${weatherLocation}`);
+            } else if (intent === "IMAGE") {
+                console.log(`Intent: IMAGE - Raw Prompt: ${intentData.image_prompt}`);
+
+                res.write(`data: ${JSON.stringify({ type: 'search_start', isAuto: true })}\n\n`);
+                res.write(`data: ${JSON.stringify({ type: 'search_progress', message: "Enhancing prompt..." })}\n\n`);
+
+                // 1. Enhance the prompt using the selected model (or a fast one)
+                let enhancedPrompt = intentData.image_prompt;
+                try {
+                    const enhancementCompletion = await groq.chat.completions.create({
+                        messages: [
+                            {
+                                role: "system",
+                                content: "You are an expert AI image prompt engineer. Your task is to take a basic image description and rewrite it into a highly detailed, artistic, and effective prompt for an image generation model (like Flux or Midjourney). Focus on lighting, texture, composition, and style. RETURN ONLY THE ENHANCED PROMPT TEXT. NO PREAMBLE."
+                            },
+                            {
+                                role: "user",
+                                content: `Enhance this prompt: "${intentData.image_prompt}"`
+                            }
+                        ],
+                        model: payload.model || "llama-3.1-70b-versatile",
+                        temperature: 0.7,
+                        max_completion_tokens: 200,
+                    });
+                    enhancedPrompt = enhancementCompletion.choices[0]?.message?.content?.trim() || intentData.image_prompt;
+                    console.log(`Intent: IMAGE - Enhanced Prompt: ${enhancedPrompt}`);
+                } catch (err) {
+                    console.error("Prompt enhancement failed, using raw prompt:", err);
+                }
+
+                res.write(`data: ${JSON.stringify({ type: 'search_progress', message: "Generating image..." })}\n\n`);
+
+                // 2. Construct Pollinations URL with Enhanced Prompt
+                const finalPrompt = enhancedPrompt;
+                // Use model 'flux-realism' for high quality results as requested
+                const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=1024&height=1024&nologo=true&model=flux-realism`;
+
+                // 3. Send Image Event
+                res.write(`data: ${JSON.stringify({
+                    type: 'image_generated',
+                    url: imageUrl,
+                    prompt: finalPrompt,
+                    rawPrompt: intentData.image_prompt
+                })}\n\n`);
+
+                // 4. Send the ENHANCED PROMPT as content (hidden in UI) so future turns know what was generated
+                res.write(`data: ${JSON.stringify({
+                    type: 'content',
+                    content: `Generated image: ${finalPrompt}`
+                })}\n\n`);
+
+                res.write(`data: [DONE]\n\n`);
+                res.end();
+                delete store[req.params.id];
+                return; // Stop further processing
+            }
+        }
+
+        // <<< INJECT ATTACHMENT CONTEXT >>>
+        if (attachmentContext) {
+            console.log("Injecting Attachment Context...");
+
+            // Send event to frontend to update persistent state
+            res.write(`data: ${JSON.stringify({ type: 'attachment_processed', content: attachmentContext })}\n\n`);
+
+            // Append to the last user message
+            const lastMsg = finalMessages[finalMessages.length - 1];
+            if (lastMsg.role === 'user') {
+                lastMsg.content += attachmentContext;
+
+                // <<< PERSISTENCE FIX >>>
+                // Also update the persistent store so this context is saved for future turns
+                if (payload.messages && payload.messages.length > 0) {
+                    const persistentLastMsg = payload.messages[payload.messages.length - 1];
+                    if (persistentLastMsg.role === 'user') {
+                        persistentLastMsg.content = lastMsg.content; // Sync content
+                    }
+                }
+            } else {
+                // Should not happen if history is correct, but safe fallback
+                finalMessages.push({ role: 'user', content: attachmentContext });
             }
         }
 
@@ -357,9 +537,10 @@ app.get('/stream/:id', async (req, res) => {
                     `Source ${i + 1} (${r.title}): ${r.snippet}\nURL: ${r.link}`
                 ).join('\n\n');
 
+                // Insert search context as a specialized ephemeral system message
                 const systemContextMsg = {
                     role: 'system',
-                    content: `Here is real-time information from the web to help answer the user's question:\n\n${searchContext}\n\nPlease use this information to provide an up-to-date and accurate answer. Cite your sources if relevant.`
+                    content: `[SEARCH RESULTS for "${userQuery}"]\nHere is real-time information from the web to help answer the user's question:\n\n${searchContext}\n\nIMPORTANT: Use this information ONLY for the current query. Do NOT assume this context applies to future unrelated queries.\n\n[END SEARCH RESULTS]`
                 };
 
                 // Insert search context before the last user message
@@ -440,9 +621,21 @@ app.post('/deepmind/prepare', async (req, res) => {
         }
     }
 
-    // Clean messages
+    // Clean messages for storage - Remove ephemeral system messages (Search Results, Weather)
     const cleanedMessages = contextMessages
-        .filter(msg => msg.role !== 'separator' && msg.role !== 'deepmind-progress')
+        .filter(msg => {
+            // Keep User and Assistant messages
+            if (msg.role === 'user' || msg.role === 'assistant') return true;
+            // Keep System messages ONLY if they are the original system prompt (usually index 0)
+            // or specific persistent instructions.
+            // DROP "SEARCH RESULTS" and "CURRENT WEATHER DATA"
+            if (msg.role === 'system') {
+                if (msg.content.includes("[SEARCH RESULTS")) return false;
+                if (msg.content.includes("CURRENT WEATHER DATA")) return false;
+                // Add other ephemeral indicators here
+            }
+            return true;
+        })
         .map(msg => ({
             role: msg.role,
             content: msg.content

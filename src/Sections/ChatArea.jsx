@@ -1,9 +1,11 @@
-import { PanelRightOpen } from "lucide-react"
+import { Copy, Sparkles, Image as ImageIcon, FileText, PanelRightOpen } from "lucide-react";
 import AiInput from "../components/ui/AiInput"
-import MarkdownRenderer from "../components/ui/MarkdownRenderer"
+import MarkdownRenderer from "../components/ui/MarkdownRenderer";
 import DeepMindProgress from "../components/ui/DeepMindProgress"
-import SearchStatus from "../components/ui/SearchStatus"
-import WeatherCard from "../components/ui/WeatherCard"
+import SearchStatus from "../components/ui/SearchStatus";
+import WeatherCard from "../components/ui/WeatherCard";
+import ImageGenCard from "../components/ui/ImageGenCard";
+import ReactMarkdown from 'react-markdown';
 import { motion } from "framer-motion"
 import { useState, useEffect, useRef } from "react"
 import axios from "axios"
@@ -19,6 +21,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
     const [selectedModel, setSelectedModel] = useState('gpt-oss-120b')
     const [isDeepMindEnabled, setIsDeepMindEnabled] = useState(false)
     const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false)
+    const [attachment, setAttachment] = useState(null) // New Attachment State
     const [deepMindPhase, setDeepMindPhase] = useState(0)
     const [deepMindData, setDeepMindData] = useState({})
     const [userId] = useState(() => nanoid()) // Persist userId for the session
@@ -56,7 +59,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
         if (previousModel.current !== selectedModel && context.length > 0) {
             setcontext(prev => [...prev, {
                 role: "separator",
-                content: `Model changed to ${selectedModel.toUpperCase().replace(/-/g, ' ')}`,
+                content: `Model changed to ${selectedModel.toUpperCase().replace(/-/g, ' ')} `,
                 model: selectedModel
             }]);
         }
@@ -104,7 +107,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
             setcontext(prev => [...prev, { role: "deepmind-progress", index: progressIndex }]);
 
             // Add empty message for final response
-            setcontext(prev => [...prev, { role: "system", content: "" }]);
+            setcontext(prev => [...prev, { role: "assistant", content: "" }]);
             setIsStreaming(true);
             streamingMessageRef.current = "";
 
@@ -140,7 +143,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                     setcontext(prev => {
                         const updated = [...prev];
                         updated[updated.length - 1] = {
-                            role: "system",
+                            role: "assistant",
                             content: streamingMessageRef.current,
                             streaming: true
                         };
@@ -208,7 +211,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
     };
 
     const completeQuery = async () => {
-        if (!promptInput || !promptInput.trim()) return;
+        if ((!promptInput || !promptInput.trim()) && !attachment) return; // Allow sending if only attachment exists
 
         // Route to DeepMind if enabled
         if (isDeepMindEnabled) {
@@ -219,24 +222,32 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
             // Set chat as started
             setIsChatStarted(true);
 
-            // Add user message to context
-            setcontext(prev => [...prev, { role: "user", content: promptInput }]);
+            // Add user message to context (Show attachment name if present)
+            setcontext(prev => [...prev, {
+                role: "user",
+                content: promptInput,
+                attachment: attachment // Store metadata for UI rendering
+            }]);
+            const messageToSend = promptInput;
             setpromptInput("");
+            const attachmentToSend = attachment; // Capture current attachment
+            setAttachment(null); // Reset attachment state immediately
 
             // Step 1: Prepare stream with userId for context
             const response = await axios.post("http://localhost:5000/prepare-stream", {
-                message: promptInput,
+                message: messageToSend,
                 userId: userId,
                 model: selectedModel,
                 isWebSearchEnabled: isWebSearchEnabled,
-                messages: [{ role: "user", content: promptInput }]
+                attachment: attachmentToSend, // Pass attachment to backend
+                messages: [{ role: "user", content: messageToSend }]
             });
 
             const { streamId } = response.data;
 
             // Add empty system message for streaming
             setcontext(prev => [...prev, {
-                role: "system",
+                role: "assistant",
                 content: "",
                 searchStatus: isWebSearchEnabled ? 'searching' : null,
                 searchLogs: [],
@@ -277,7 +288,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                     setcontext(prev => {
                         const updated = [...prev];
                         const lastMsg = updated[updated.length - 1];
-                        if (lastMsg.role === 'system') {
+                        if (lastMsg.role === 'assistant') {
                             lastMsg.searchStatus = 'searching';
                             // If backend signals auto search, flag it
                             if (data.isAuto) lastMsg.isAutoSearch = true;
@@ -290,7 +301,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                     setcontext(prev => {
                         const updated = [...prev];
                         const lastMsg = updated[updated.length - 1];
-                        if (lastMsg.role === 'system') {
+                        if (lastMsg.role === 'assistant') {
                             lastMsg.searchLogs = [...(lastMsg.searchLogs || []), data.message];
                         }
                         return updated;
@@ -301,7 +312,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                     setcontext(prev => {
                         const updated = [...prev];
                         const lastMsg = updated[updated.length - 1];
-                        if (lastMsg.role === 'system') {
+                        if (lastMsg.role === 'assistant') {
                             lastMsg.searchSources = [...(lastMsg.searchSources || []), data.source];
                         }
                         return updated;
@@ -312,22 +323,44 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                     setcontext(prev => {
                         const updated = [...prev];
                         const lastMsg = updated[updated.length - 1];
-                        if (lastMsg.role === 'system') {
+                        if (lastMsg.role === 'assistant') {
                             lastMsg.weatherData = data.data;
                         }
                         return updated;
                     });
                 }
 
-                if (data.type === 'weather_data') {
+                if (data.type === 'image_generated') {
                     setcontext(prev => {
                         const updated = [...prev];
                         const lastMsg = updated[updated.length - 1];
-                        if (lastMsg.role === 'system') {
-                            lastMsg.weatherData = data.data;
+                        if (lastMsg.role === 'assistant') {
+                            lastMsg.imageGenerated = {
+                                url: data.url,
+                                prompt: data.prompt
+                            };
                         }
                         return updated;
                     });
+                }
+
+                if (data.type === 'attachment_processed') {
+                    setcontext(prev => {
+                        const updated = [...prev];
+                        // Find the last user message to attach the hidden content to
+                        // It's usually the one before the current system message being streamed
+                        // or the last message if streaming hasn't fully started yet
+                        const lastUserMsgIndex = updated.map(m => m.role).lastIndexOf('user');
+
+                        if (lastUserMsgIndex !== -1) {
+                            updated[lastUserMsgIndex] = {
+                                ...updated[lastUserMsgIndex],
+                                hiddenContent: updated[lastUserMsgIndex].content + data.content
+                            };
+                        }
+                        return updated;
+                    });
+                    return; // Stop processing this event
                 }
 
                 if (data.content || (data.type === 'content' && data.content)) {
@@ -444,6 +477,10 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
             <motion.div
                 ref={scrollContainerRef}
                 onScroll={handleScroll}
+                style={{
+                    maskImage: 'linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent)',
+                    WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent)'
+                }}
                 animate={{
                     height: isChatStarted ? '80%' : '0%',
                     opacity: isChatStarted ? 1 : 0
@@ -485,6 +522,20 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                         // Render regular messages
                         return (
                             <div key={index} className="flex flex-col w-full mb-4">
+                                {/* Attachment Card */}
+                                {node.attachment && (
+                                    <div className="flex justify-end mb-2">
+                                        <div className="bg-secondary/50 backdrop-blur-sm border border-white/10 p-3 rounded-xl flex items-center gap-3 w-fit max-w-[80%]">
+                                            <div className={`p-2 rounded-lg ${node.attachment.type.startsWith('image/') ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>
+                                                {node.attachment.type.startsWith('image/') ? <ImageIcon size={20} /> : <FileText size={20} />}
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-medium text-text">{node.attachment.name}</span>
+                                                <span className="text-xs text-textLight uppercase">{node.attachment.type.split('/')[1] || 'FILE'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 {/* Weather Card - Full Width */}
                                 {node.weatherData && (
                                     <div className="w-full">
@@ -504,18 +555,35 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                                     </div>
                                 )}
 
-                                <motion.div
-                                    className={`text-text p-4 rounded-2xl ${node.role == "user"
-                                        ? 'bg-secondary ml-auto w-fit max-w-[80%]'
-                                        : 'mr-auto w-full'
-                                        }`}
-                                >
-                                    {node.role === "user" ? (
-                                        <p className="text-text whitespace-pre-wrap">{node.content}</p>
-                                    ) : (
-                                        <MarkdownRenderer content={node.content} streaming={node.streaming} />
-                                    )}
-                                </motion.div>
+                                {/* Image Generation Card */}
+                                {node.imageGenerated && (
+                                    <div className="w-full flex justify-start mb-4">
+                                        <ImageGenCard
+                                            imageUrl={node.imageGenerated.url}
+                                            prompt={node.imageGenerated.prompt}
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Only show text bubble if it's NOT a system message with an image */}
+                                {(!node.imageGenerated || node.role === 'user') && (
+                                    <motion.div
+                                        className={`text-text p-4 rounded-2xl ${node.role == "user"
+                                            ? 'bg-secondary ml-auto w-fit max-w-[80%]'
+                                            : 'mr-auto w-full'
+                                            }`}
+                                    >
+                                        {node.role === "user" ? (
+                                            <p className="text-text whitespace-pre-wrap">{node.content}</p>
+                                        ) : (
+                                            <MarkdownRenderer
+                                                content={node.content}
+                                                streaming={node.streaming}
+                                                sources={node.searchSources}
+                                            />
+                                        )}
+                                    </motion.div>
+                                )}
                             </div>
                         )
                     })
@@ -541,6 +609,8 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                     setIsDeepMindEnabled={setIsDeepMindEnabled}
                     isWebSearchEnabled={isWebSearchEnabled}
                     setIsWebSearchEnabled={setIsWebSearchEnabled}
+                    attachment={attachment}
+                    setAttachment={setAttachment}
                 />
             </motion.div>
         </motion.div>

@@ -1,11 +1,150 @@
-import { Brain, Earth, Lightbulb, Plus, Send, ChevronDown, Bot, Rocket, Mountain, Moon, Sparkles } from "lucide-react"
+import { Brain, Earth, Lightbulb, Plus, Send, ChevronDown, Bot, Rocket, Mountain, Moon, Sparkles, Paperclip, X, FileText, Image as ImageIcon, Mic, Square } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import axios from "axios"
 
-function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, isWebSearchEnabled, setIsWebSearchEnabled }) {
+function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment }) {
 
     const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
     const dropdownRef = useRef(null)
+    const fileInputRef = useRef(null)
+
+    // Voice Input State
+    const [isRecording, setIsRecording] = useState(false);
+    const mediaRecorderRef = useRef(null);
+    const audioChunksRef = useRef([]);
+    const silenceTimerRef = useRef(null);
+    const audioContextRef = useRef(null);
+    const analyserRef = useRef(null);
+    const maxDurationTimerRef = useRef(null);
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+            // Use audio/webm;codecs=opus for better compression
+            const options = { mimeType: 'audio/webm;codecs=opus' };
+            const mediaRecorder = new MediaRecorder(stream, options);
+            mediaRecorderRef.current = mediaRecorder;
+            audioChunksRef.current = [];
+
+            // Setup audio analysis for silence detection
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const analyser = audioContext.createAnalyser();
+            const microphone = audioContext.createMediaStreamSource(stream);
+            microphone.connect(analyser);
+            analyser.fftSize = 512;
+
+            audioContextRef.current = audioContext;
+            analyserRef.current = analyser;
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            // Max recording duration: 30 seconds (safety limit)
+            maxDurationTimerRef.current = setTimeout(() => {
+                console.log('[Voice] Auto-stopping: Max duration reached (30s)');
+                stopRecording();
+            }, 30000);
+
+            // Monitor audio levels for silence detection
+            const checkSilence = () => {
+                if (!analyserRef.current) return;
+
+                analyser.getByteFrequencyData(dataArray);
+                const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+
+                // Lower threshold to ensure we only stop on True Silence (tuned to 12)
+                if (average < 12) {
+                    if (!silenceTimerRef.current) {
+                        // Snappier timeout (2.5 seconds) to feel more responsive
+                        silenceTimerRef.current = setTimeout(() => {
+                            console.log('[Voice] Auto-stopping due to silence');
+                            stopRecording();
+                        }, 2500);
+                    }
+                } else {
+                    // Reset timer if user is speaking
+                    if (silenceTimerRef.current) {
+                        clearTimeout(silenceTimerRef.current);
+                        silenceTimerRef.current = null;
+                    }
+                }
+
+                if (isRecording) {
+                    requestAnimationFrame(checkSilence);
+                }
+            };
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
+
+                console.log(`[Voice] Recording size: ${(audioBlob.size / 1024).toFixed(2)} KB`);
+
+                // Check if file is too large (Groq limit appears to be ~25MB but let's be safe)
+                if (audioBlob.size > 20 * 1024 * 1024) {
+                    alert('Recording too long. Please keep it under 30 seconds.');
+                    setIsRecording(false);
+                    stream.getTracks().forEach(track => track.stop());
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('file', audioBlob, 'recording.webm');
+
+                setIsRecording(false);
+                setpromptInput("Transcribing...");
+
+                // Cleanup
+                if (silenceTimerRef.current) {
+                    clearTimeout(silenceTimerRef.current);
+                    silenceTimerRef.current = null;
+                }
+                if (maxDurationTimerRef.current) {
+                    clearTimeout(maxDurationTimerRef.current);
+                    maxDurationTimerRef.current = null;
+                }
+                if (audioContextRef.current) {
+                    audioContextRef.current.close();
+                    audioContextRef.current = null;
+                }
+
+                try {
+                    const response = await axios.post('http://localhost:5000/transcribe', formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' }
+                    });
+                    setpromptInput(response.data.text);
+                } catch (error) {
+                    console.error("Transcription error:", error);
+                    setpromptInput("Error transcribing audio. Try speaking for a shorter duration.");
+                }
+
+                stream.getTracks().forEach(track => track.stop());
+            };
+
+            mediaRecorder.start();
+            setIsRecording(true);
+
+            // Start monitoring silence
+            checkSilence();
+        } catch (error) {
+            console.error("Error accessing microphone:", error);
+            alert("Could not access microphone.");
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+        }
+    };
 
     const models = [
         { id: 'gpt-oss-120b', name: 'GPT-OSS 120B', Icon: Bot },
@@ -34,18 +173,98 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
         setpromptInput(e.target.value)
     }
 
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            toggleChatStatus();
+        }
+    }
+
     const handleModelSelect = (modelId) => {
         setSelectedModel(modelId)
         setIsModelDropdownOpen(false)
     }
 
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // Limit size (e.g. 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+            alert("File is too large using context injection. Please use a file smaller than 10MB.");
+            return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = (event) => {
+            setAttachment({
+                name: file.name,
+                type: file.type,
+                content: event.target.result // Base64 or Text
+            });
+        };
+
+        // For simplicity, read everything as Data URL (Base64) and handle parsing on server/client
+        // Images NEED Data URL. PDFs/Docs can be parsed from Data URL buffer on backend.
+        reader.readAsDataURL(file);
+
+        // Reset input value so same file can be selected again if needed
+        e.target.value = null;
+    };
+
     return (
-        <div className="bg-secondary border-2 border-border w-[70%] h-32 rounded-2xl p-1.5 flex flex-col justify-between">
-            <input type="text" value={promptInput} onChange={handlepromptInput} className="h-14 text-text placeholder:text-textLight outline-none px-4 bg-transparent" placeholder="Ask Anything" />
+        <div className="bg-secondary border-2 border-border w-[70%] h-32 rounded-2xl p-1.5 flex flex-col justify-between relative">
+
+            {/* Hidden File Input */}
+            <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                onChange={handleFileUpload}
+                accept=".txt,.js,.jsx,.py,.html,.css,.json,.md,.csv,.pdf,.docx,image/*"
+            />
+
+            {/* Attachment Preview Pill */}
+            <AnimatePresence>
+                {attachment && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        className="absolute top-[-50px] left-0 bg-secondary/95 backdrop-blur-md border border-white/10 px-4 py-2 rounded-xl flex items-center gap-3 shadow-xl z-10"
+                    >
+                        <div className={`p-2 rounded-lg ${attachment.type.startsWith('image/') ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>
+                            {attachment.type.startsWith('image/') ? <ImageIcon size={16} /> : <FileText size={16} />}
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-xs font-semibold text-text max-w-[180px] truncate">{attachment.name}</span>
+                            <span className="text-[10px] text-textLight uppercase tracking-wider">{attachment.type.split('/')[1] || 'FILE'}</span>
+                        </div>
+                        <button
+                            onClick={() => setAttachment(null)}
+                            className="ml-2 bg-white/5 hover:bg-red-500/20 rounded-full p-1 text-textLight hover:text-red-400 transition-all"
+                        >
+                            <X size={14} />
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <input
+                type="text"
+                value={promptInput}
+                onChange={handlepromptInput}
+                onKeyDown={handleKeyDown}
+                className="h-14 text-text placeholder:text-textLight outline-none px-4 bg-transparent"
+                placeholder={attachment ? "Type a message to send with your file..." : "Ask Anything"}
+            />
             <div className="w-full bg-primary flex p-1 justify-between rounded-2xl border-2 border-borderLight">
                 <div className="flex gap-1">
-                    <button className="bg-tertiary w-11 h-11 rounded-2xl  border-borderLight border-2 text-text flex justify-center items-center">
-                        <Plus size={18} />
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`w-11 h-11 rounded-2xl border-2 flex justify-center items-center transition-colors ${attachment ? 'bg-blue-500/20 border-blue-500/50 text-blue-400' : 'bg-tertiary border-borderLight text-text'}`}
+                    >
+                        {attachment ? <Paperclip size={18} /> : <Plus size={18} />}
                     </button>
 
                     {/* Search Button (Hidden if DeepMind is Enabled) */}
@@ -114,63 +333,153 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                         )}
                     </AnimatePresence>
 
-                    {/* Model Dropdown (Hidden if EITHER DeepMind OR Search is Enabled) */}
-                    <AnimatePresence mode="popLayout">
-                        {!isDeepMindEnabled && !isWebSearchEnabled && (
-                            <motion.div
-                                key="model-selector"
-                                initial={{ width: 0, opacity: 0, scale: 0.8 }}
-                                animate={{ width: "auto", opacity: 1, scale: 1 }}
-                                exit={{ width: 0, opacity: 0, scale: 0.8 }}
-                                className="relative"
-                                ref={dropdownRef}
-                            >
-                                <button
-                                    onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                                    className="bg-tertiary h-11 rounded-2xl border-borderLight border-2 text-text flex gap-2 px-3 justify-center items-center hover:bg-secondary transition-colors cursor-pointer whitespace-nowrap"
-                                >
-                                    {(() => {
-                                        const SelectedIcon = models.find(m => m.id === selectedModel)?.Icon || Bot
-                                        return <SelectedIcon size={16} />
-                                    })()}
-                                    <span className="text-sm">{models.find(m => m.id === selectedModel)?.name || 'Select Model'}</span>
-                                    <ChevronDown size={16} className={`transition-transform duration-200 ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
-                                </button>
-                                <AnimatePresence>
-                                    {isModelDropdownOpen && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                            transition={{ duration: 0.15 }}
-                                            className="absolute bottom-full mb-2 left-0 bg-secondary border-2 border-border rounded-xl overflow-hidden shadow-lg z-50 min-w-[200px]"
-                                        >
-                                            {models.map((model) => {
-                                                const ModelIcon = model.Icon
-                                                return (
-                                                    <button
-                                                        key={model.id}
-                                                        onClick={() => handleModelSelect(model.id)}
-                                                        className={`w-full px-4 py-3 text-left hover:bg-primary transition-colors flex items-center gap-2 cursor-pointer ${selectedModel === model.id ? 'bg-tertiary' : ''
-                                                            }`}
-                                                    >
-                                                        <ModelIcon size={16} className="text-text" />
-                                                        <span className="text-sm text-text">{model.name}</span>
-                                                    </button>
-                                                )
-                                            })}
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                    {/* Voice Input Button */}
+                    <button
+                        onClick={isRecording ? stopRecording : startRecording}
+                        className={`w-11 h-11 rounded-2xl border-2 flex justify-center items-center transition-all ${isRecording
+                            ? 'bg-red-500/20 border-red-500 text-red-500 animate-pulse'
+                            : 'bg-tertiary border-borderLight text-text'
+                            }`}
+                    >
+                        {isRecording ? <Square size={18} fill="currentColor" /> : <Mic size={18} />}
+                    </button>
+
                 </div>
-                <button
-                    onClick={toggleChatStatus}
-                    className="bg-tertiary w-11 h-11 rounded-2xl border-borderLight border-2 text-text flex justify-center items-center">
-                    <Send size={18} />
-                </button>
+
+
+                {/* Listening Overlay (Glassmorphism) */}
+                <AnimatePresence>
+                    {isRecording && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="absolute inset-0 bg-black/60 backdrop-blur-xl rounded-2xl flex flex-col justify-center items-center z-50"
+                        >
+                            {/* Continuous Sine Wave Visualization */}
+                            <div className="relative w-56 h-20 mb-3">
+                                {/* Multiple layered sine waves for depth */}
+                                {[0, 1, 2].map((layer) => (
+                                    <motion.div
+                                        key={layer}
+                                        className="absolute inset-0"
+                                        style={{
+                                            background: `radial-gradient(ellipse at center, ${layer === 0 ? 'rgba(59, 130, 246, 0.3)' :
+                                                layer === 1 ? 'rgba(139, 92, 246, 0.25)' :
+                                                    'rgba(236, 72, 153, 0.2)'
+                                                } 0%, transparent 70%)`,
+                                            filter: 'blur(6px)',
+                                        }}
+                                        animate={{
+                                            scaleX: [1, 1.15, 1],
+                                            scaleY: [1, 1.2, 1],
+                                            opacity: [0.4, 0.7, 0.4],
+                                        }}
+                                        transition={{
+                                            duration: 2 + layer * 0.5,
+                                            repeat: Infinity,
+                                            ease: "easeInOut",
+                                            delay: layer * 0.2,
+                                        }}
+                                    />
+                                ))}
+
+                                {/* SVG Sine Waves */}
+                                <svg className="w-full h-full" viewBox="0 0 200 50" preserveAspectRatio="xMidYMid meet">
+                                    {[0, 1, 2].map((wave) => (
+                                        <motion.path
+                                            key={wave}
+                                            d={`M 0 25 Q 25 ${16 - wave * 2} 50 25 T 100 25 T 150 25 T 200 25`}
+                                            fill="none"
+                                            stroke={wave === 0 ? '#3b82f6' : wave === 1 ? '#8b5cf6' : '#ec4899'}
+                                            strokeWidth="2.5"
+                                            strokeLinecap="round"
+                                            opacity={0.9 - wave * 0.2}
+                                            animate={{
+                                                d: [
+                                                    `M 0 25 Q 25 ${16 - wave * 2} 50 25 T 100 25 T 150 25 T 200 25`,
+                                                    `M 0 25 Q 25 ${34 + wave * 2} 50 25 T 100 25 T 150 25 T 200 25`,
+                                                    `M 0 25 Q 25 ${16 - wave * 2} 50 25 T 100 25 T 150 25 T 200 25`,
+                                                ],
+                                            }}
+                                            transition={{
+                                                duration: 1.5 + wave * 0.3,
+                                                repeat: Infinity,
+                                                ease: "easeInOut",
+                                            }}
+                                        />
+                                    ))}
+                                </svg>
+                            </div>
+
+                            <motion.span
+                                className="text-white font-semibold tracking-widest uppercase text-sm"
+                                animate={{ opacity: [0.6, 1, 0.6] }}
+                                transition={{ duration: 2, repeat: Infinity }}
+                            >
+                                Listening...
+                            </motion.span>
+
+                            <motion.p
+                                className="text-white/60 text-xs mt-2"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 0.7 }}
+                                transition={{ delay: 0.5 }}
+                            >
+                                Auto-stops after silence
+                            </motion.p>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                <div className="flex gap-2 relative">
+                    {/* Model Selector */}
+                    <div className="relative" ref={dropdownRef}>
+                        <button
+                            onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+                            className="bg-tertiary h-11 rounded-2xl border-2 border-borderLight px-3 flex items-center gap-2 text-text text-sm cursor-pointer hover:bg-secondary transition-colors w-[140px] justify-between"
+                        >
+                            <div className="flex items-center gap-2 overflow-hidden">
+                                {(() => {
+                                    const ModelIcon = models.find(m => m.id === selectedModel)?.Icon || Bot;
+                                    return <ModelIcon size={16} className="shrink-0" />;
+                                })()}
+                                <span className="truncate">{models.find(m => m.id === selectedModel)?.name}</span>
+                            </div>
+                            <ChevronDown size={14} className={`text-textLight transition-transform duration-200 ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        <AnimatePresence>
+                            {isModelDropdownOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    className="absolute bottom-full mb-2 left-0 w-[180px] bg-secondary border border-border rounded-xl shadow-xl overflow-hidden py-1 z-50"
+                                >
+                                    {models.map((model) => (
+                                        <button
+                                            key={model.id}
+                                            onClick={() => handleModelSelect(model.id)}
+                                            className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-tertiary transition-colors ${selectedModel === model.id ? 'text-blue-400 bg-blue-500/10' : 'text-text'
+                                                }`}
+                                        >
+                                            <model.Icon size={16} />
+                                            {model.name}
+                                        </button>
+                                    ))}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+                    <button
+                        onClick={toggleChatStatus}
+                        className={`w-11 h-11 rounded-2xl flex justify-center items-center transition-all ${isChatStarted || promptInput || attachment ? 'bg-white text-black' : 'bg-tertiary text-textLight cursor-not-allowed'
+                            }`}
+                    >
+                        <Send size={20} />
+                    </button>
+                </div>
             </div>
         </div>
     )
