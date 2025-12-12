@@ -33,9 +33,12 @@ const MAX_CONTEXT_TOKENS = 4000;
 const CONTEXT_WARNING_THRESHOLD = 3000;
 
 // DeepMind: Helper to select random models (excludes non-Groq models like Gemini)
+// DeepMind: Helper to select random models (excludes non-Groq models like Gemini and Vision models)
 function selectRandomModels(count = 3, exclude = []) {
     const allModels = Object.keys(MODEL_CONFIGS).filter(m =>
-        !exclude.includes(m) && !MODEL_CONFIGS[m].provider // Only include Groq models
+        !exclude.includes(m) &&
+        !MODEL_CONFIGS[m].provider && // Only send Groq models
+        m !== 'llama-4-maverick' // Exclude Vision/Specialized models from general consensus
     );
     const shuffled = allModels.sort(() => 0.5 - Math.random());
     return shuffled.slice(0, Math.min(count, shuffled.length));
@@ -291,13 +294,13 @@ app.get('/stream/:id', async (req, res) => {
         // Clean messages: remove frontend-only properties and ephemeral system messages
         const cleanedMessages = messages
             .filter(msg => {
-                if (msg.role === 'separator') return false;
-                // Filter out persisted ephemeral system messages
+                if (msg.role === 'user' || msg.role === 'assistant') return true;
                 if (msg.role === 'system') {
                     if (msg.content.includes("[SEARCH RESULTS")) return false;
                     if (msg.content.includes("CURRENT WEATHER DATA")) return false;
+                    return true;
                 }
-                return true;
+                return false; // Drop separator, deepmind-progress, etc.
             })
             .map(msg => ({
                 role: msg.role,
@@ -632,9 +635,9 @@ app.post('/deepmind/prepare', async (req, res) => {
             if (msg.role === 'system') {
                 if (msg.content.includes("[SEARCH RESULTS")) return false;
                 if (msg.content.includes("CURRENT WEATHER DATA")) return false;
-                // Add other ephemeral indicators here
+                return true;
             }
-            return true;
+            return false; // Strict filter: Drop everything else (deepmind-progress, separator, etc.)
         })
         .map(msg => ({
             role: msg.role,
@@ -685,16 +688,46 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
                 ...session.messages
             ];
 
-        // PHASE 1: Query 2 random models
+        // PHASE 0.5: Research (Gathering Resources)
+        // Check if we need external info before starting the debate
+        const originalUserMsg = session.messages.find(m => m.role === 'user');
+        const intentData = await detectSearchIntent(originalUserMsg?.content || "");
+
+        if (intentData.category === "SEARCH") {
+            session.phase = 0.5;
+            res.write(`data: ${JSON.stringify({ type: 'phase', phase: 0.5, message: "Gathering resources..." })}\n\n`);
+
+            // Perform search
+            const searchResults = await performSearch(originalUserMsg.content);
+            const searchContext = searchResults.map(r => `[${r.title}](${r.link}): ${r.snippet}`).join('\n\n');
+
+            // Inject ephemeral search context
+            const researchContextMsg = {
+                role: 'system',
+                content: `[SEARCH RESULTS for "${originalUserMsg.content}"]\nHere is real-time information to help answer the user's question:\n\n${searchContext}\n\nIMPORTANT: Use this information ONLY for the current query.\n[END SEARCH RESULTS]`
+            };
+
+            // Inject into finalMessages for the models to see
+            // We insert it after the system prompt (index 1) or at the beginning if no system prompt
+            if (finalMessages[0].role === 'system') {
+                finalMessages.splice(1, 0, researchContextMsg);
+            } else {
+                finalMessages.unshift(researchContextMsg);
+            }
+            res.write(`data: ${JSON.stringify({ type: 'research_complete', results: searchResults.length })}\n\n`);
+        }
+
+        // PHASE 1: Query 2 random models (Parallel Execution)
         session.phase = 1;
         session.phase1Models = selectRandomModels(2);
         res.write(`data: ${JSON.stringify({ type: 'phase', phase: 1, models: session.phase1Models })}\n\n`);
 
-        for (const modelKey of session.phase1Models) {
+        // Execute Phase 1 models in parallel
+        await Promise.all(session.phase1Models.map(async (modelKey) => {
             const response = await getModelCompletion(modelKey, finalMessages);
             session.phase1Responses.push({ model: modelKey, response });
             res.write(`data: ${JSON.stringify({ type: 'phase1_complete', model: modelKey, response })}\n\n`);
-        }
+        }));
 
         // PHASE 2: Send phase 1 responses to 3 different models for validation
         session.phase = 2;

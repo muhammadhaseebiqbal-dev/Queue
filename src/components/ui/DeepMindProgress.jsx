@@ -34,17 +34,27 @@ function DeepMindProgress({ phase, phaseData }) {
             </div>
 
             <div className="mb-4">
+                {/* Research Phase Indicator */}
+                {phase === 0.5 && (
+                    <div className="flex items-center gap-2 mb-3 p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                        <Loader2 size={16} className="text-blue-400 animate-spin" />
+                        <span className="text-xs font-medium text-blue-400">Gathering resources from the web...</span>
+                    </div>
+                )}
+
                 <div className="flex items-center gap-2 mb-2">
                     {phase >= 1 ? (
                         <div className="w-4 h-4 rounded-full bg-tertiary border border-border flex items-center justify-center">
                             <div className="w-2 h-2 rounded-full bg-text"></div>
                         </div>
                     ) : (
-                        <Loader2 size={16} className="text-textLight animate-spin" />
+                        <div className={`w-4 h-4 rounded-full border border-border flex items-center justify-center ${phase === 0.5 ? 'bg-tertiary' : ''}`}>
+                            {phase === 0.5 ? <div className="w-2 h-2 rounded-full bg-textLight/50"></div> : <Loader2 size={16} className="text-textLight animate-spin" />}
+                        </div>
                     )}
                     <span className="text-xs font-medium text-text">Phase 1: Initial Analysis</span>
                 </div>
-                
+
                 {phaseData.phase1Models && (
                     <div className="flex flex-wrap gap-2 ml-6">
                         {phaseData.phase1Models.map((model, idx) => {
@@ -72,9 +82,9 @@ function DeepMindProgress({ phase, phaseData }) {
 
             <motion.div
                 initial={{ opacity: 0, height: 0 }}
-                animate={{ 
-                    opacity: phase >= 1 ? 1 : 0, 
-                    height: phase >= 1 ? 'auto' : 0 
+                animate={{
+                    opacity: phase >= 1 ? 1 : 0,
+                    height: phase >= 1 ? 'auto' : 0
                 }}
                 className="mb-4"
             >
@@ -90,7 +100,7 @@ function DeepMindProgress({ phase, phaseData }) {
                     )}
                     <span className="text-xs font-medium text-text">Phase 2: Cross-Validation</span>
                 </div>
-                
+
                 {phaseData.phase2Models && (
                     <div className="flex flex-wrap gap-2 ml-6">
                         {phaseData.phase2Models.map((model, idx) => {
@@ -118,9 +128,9 @@ function DeepMindProgress({ phase, phaseData }) {
 
             <motion.div
                 initial={{ opacity: 0, height: 0 }}
-                animate={{ 
-                    opacity: phase >= 2 ? 1 : 0, 
-                    height: phase >= 2 ? 'auto' : 0 
+                animate={{
+                    opacity: phase >= 2 ? 1 : 0,
+                    height: phase >= 2 ? 'auto' : 0
                 }}
                 className="mb-4"
             >
@@ -136,7 +146,7 @@ function DeepMindProgress({ phase, phaseData }) {
                     )}
                     <span className="text-xs font-medium text-text">Phase 3: Final Synthesis</span>
                 </div>
-                
+
                 <div className="ml-6">
                     <motion.div
                         initial={{ opacity: 0, scale: 0.9 }}
