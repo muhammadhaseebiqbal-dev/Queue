@@ -11,7 +11,7 @@ import { useState, useEffect, useRef } from "react"
 import axios from "axios"
 import { nanoid } from "nanoid"
 
-function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
+function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars }) {
 
     const [isChatStarted, setIsChatStarted] = useState(false)
     const [promptInput, setpromptInput] = useState('')
@@ -24,7 +24,10 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
     const [attachment, setAttachment] = useState(null) // New Attachment State
     const [deepMindPhase, setDeepMindPhase] = useState(0)
     const [deepMindData, setDeepMindData] = useState({})
-    const [userId] = useState(() => nanoid()) // Persist userId for the session
+
+    // const [userId] = useState(() => nanoid()) // Removed: using shared userId from App
+    const userId = PanelInteractionVars.userId;
+
     const previousModel = useRef('gpt-oss-120b')
     const streamingMessageRef = useRef("")
     const eventSourceRef = useRef(null)
@@ -32,6 +35,68 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
 
     const scrollContainerRef = useRef(null)
     const shouldAutoScrollRef = useRef(true)
+
+    // Load or reset chat based on session ID changes
+    useEffect(() => {
+        const loadSession = async () => {
+            if (PanelInteractionVars?.activeSessionId) {
+                // Load existing session
+                try {
+                    const response = await axios.get(`http://localhost:5000/api/messages/${PanelInteractionVars.activeSessionId}`);
+                    const loadedMessages = response.data.messages;
+
+                    if (loadedMessages && loadedMessages.length > 0) {
+                        // Transform DB messages to UI format
+                        const formattedMessages = loadedMessages.map(msg => ({
+                            role: msg.role,
+                            content: msg.content,
+                            generatedImage: msg.generatedImage, // Include generated image data
+                            type: msg.type, // Include message type
+                            model: msg.model,
+                            mode: msg.mode
+                        }));
+
+                        setcontext(formattedMessages);
+                        setIsChatStarted(true);
+
+                        // CRITICAL: Tell backend which session is active
+                        await axios.post('http://localhost:5000/api/session/activate', {
+                            userId,
+                            sessionId: PanelInteractionVars.activeSessionId
+                        });
+
+                        console.log(`[ChatArea] Loaded ${formattedMessages.length} messages for session ${PanelInteractionVars.activeSessionId}`);
+                    }
+                } catch (error) {
+                    console.error('[ChatArea] Failed to load session:', error);
+                }
+            } else {
+                // Reset for new chat
+                setIsChatStarted(false);
+                setcontext([]);
+                setpromptInput('');
+                setDeepMindPhase(0);
+                setDeepMindData({});
+
+                // Reset backend state
+                axios.post('http://localhost:5000/api/session/reset', { userId })
+                    .catch(err => console.error("Failed to reset session:", err));
+            }
+        };
+
+        loadSession();
+    }, [PanelInteractionVars?.activeSessionId, userId, PanelInteractionVars?.activeProject])
+
+    // Auto-select largest context model when in a project, reset to default otherwise
+    useEffect(() => {
+        if (PanelInteractionVars?.activeProject) {
+            // llama-3.3-70b-versatile has 128k context window (largest)
+            setSelectedModel('llama-3.3-70b-versatile');
+        } else {
+            // Reset to default model for standard chats
+            setSelectedModel('gpt-oss-120b');
+        }
+    }, [PanelInteractionVars?.activeProject]);
 
     // Handle scroll events to detect if user has scrolled up
     const handleScroll = () => {
@@ -66,13 +131,26 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
         previousModel.current = selectedModel;
     }, [selectedModel]);
 
-    // Save context to backend whenever it changes
+    // Save context to backend whenever it changes (debounced)
     useEffect(() => {
         if (context.length > 0) {
-            axios.post('http://localhost:5000/context/save', {
-                userId,
-                messages: context
-            }).catch(error => console.error('Error saving context:', error));
+            const saveTimeout = setTimeout(() => {
+                axios.post('http://localhost:5000/context/save', {
+                    userId,
+                    messages: context,
+                    projectId: PanelInteractionVars?.activeProject?._id // Include project ID if active
+                })
+                    .then((response) => {
+                        // Only refresh sidebar if backend created a NEW session
+                        if (response.data?.isNewSession && PanelInteractionVars.triggerSidebarRefresh) {
+                            console.log('[ChatArea] New session detected, refreshing sidebar');
+                            PanelInteractionVars.triggerSidebarRefresh();
+                        }
+                    })
+                    .catch(error => console.error('Error saving context:', error));
+            }, 300); // Wait 300ms before saving to batch rapid changes
+
+            return () => clearTimeout(saveTimeout);
         }
     }, [context, userId]);
 
@@ -81,7 +159,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
 
         try {
             setIsChatStarted(true);
-            setcontext(prev => [...prev, { role: "user", content: promptInput }]);
+            setcontext(prev => [...prev, { role: "user", content: promptInput, model: selectedModel, mode: 'deepmind' }]);
             const userPrompt = promptInput;
             setpromptInput("");
 
@@ -107,7 +185,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
             setcontext(prev => [...prev, { role: "deepmind-progress", index: progressIndex }]);
 
             // Add empty message for final response
-            setcontext(prev => [...prev, { role: "assistant", content: "" }]);
+            setcontext(prev => [...prev, { role: "assistant", content: "", model: 'deepmind-consensus', mode: 'deepmind' }]);
             setIsStreaming(true);
             streamingMessageRef.current = "";
 
@@ -226,7 +304,9 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
             setcontext(prev => [...prev, {
                 role: "user",
                 content: promptInput,
-                attachment: attachment // Store metadata for UI rendering
+                attachment: attachment, // Store metadata for UI rendering
+                model: selectedModel,
+                mode: 'standard'
             }]);
             const messageToSend = promptInput;
             setpromptInput("");
@@ -240,6 +320,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                 model: selectedModel,
                 isWebSearchEnabled: isWebSearchEnabled,
                 attachment: attachmentToSend, // Pass attachment to backend
+                projectId: PanelInteractionVars?.activeProject?._id, // Pass active project ID
                 messages: [{ role: "user", content: messageToSend }]
             });
 
@@ -251,7 +332,9 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                 content: "",
                 searchStatus: isWebSearchEnabled ? 'searching' : null,
                 searchLogs: [],
-                searchSources: []
+                searchSources: [],
+                model: selectedModel,
+                mode: 'standard'
             }]);
             setIsStreaming(true);
             streamingMessageRef.current = "";
@@ -260,7 +343,14 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
             eventSourceRef.current = new EventSource(`http://localhost:5000/stream/${streamId}`);
 
             eventSourceRef.current.onmessage = (event) => {
-                const data = JSON.parse(event.data);
+                let data;
+                try {
+                    data = JSON.parse(event.data);
+                    console.log('[Stream Event]', data.type || 'chunk');
+                } catch (e) {
+                    console.error('[Stream] JSON Parse Error:', e);
+                    return; // Skip invalid chunks
+                }
 
                 if (data.done) {
                     eventSourceRef.current.close();
@@ -331,13 +421,18 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                 }
 
                 if (data.type === 'image_generated') {
+                    console.log('[Stream] Received Image:', data.url);
                     setcontext(prev => {
                         const updated = [...prev];
-                        const lastMsg = updated[updated.length - 1];
-                        if (lastMsg.role === 'assistant') {
-                            lastMsg.imageGenerated = {
-                                url: data.url,
-                                prompt: data.prompt
+                        const lastIndex = updated.length - 1;
+                        if (updated[lastIndex].role === 'assistant') {
+                            updated[lastIndex] = {
+                                ...updated[lastIndex],
+                                generatedImage: {
+                                    url: data.url,
+                                    prompt: data.prompt
+                                },
+                                type: 'image_generated'
                             };
                         }
                         return updated;
@@ -452,7 +547,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                 damping: 35,
                 mass: 0.6
             }}
-            className="bg-primary relative h-screen flex flex-col justify-center items-center"
+            className="bg-primary relative h-screen flex flex-col justify-center items-center flex-1 w-full"
         >
             {/* Panel Toggle Button */}
             <motion.button
@@ -556,17 +651,17 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                                 )}
 
                                 {/* Image Generation Card */}
-                                {node.imageGenerated && (
+                                {node.generatedImage && (
                                     <div className="w-full flex justify-start mb-4">
                                         <ImageGenCard
-                                            imageUrl={node.imageGenerated.url}
-                                            prompt={node.imageGenerated.prompt}
+                                            imageUrl={node.generatedImage.url}
+                                            prompt={node.generatedImage.prompt}
                                         />
                                     </div>
                                 )}
 
                                 {/* Only show text bubble if it's NOT a system message with an image */}
-                                {(!node.imageGenerated || node.role === 'user') && (
+                                {(!node.generatedImage || node.role === 'user') && (
                                     <motion.div
                                         className={`text-text p-4 rounded-2xl ${node.role == "user"
                                             ? 'bg-secondary ml-auto w-fit max-w-[80%]'
@@ -611,6 +706,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded }) {
                     setIsWebSearchEnabled={setIsWebSearchEnabled}
                     attachment={attachment}
                     setAttachment={setAttachment}
+                    activeProject={PanelInteractionVars?.activeProject}
                 />
             </motion.div>
         </motion.div>

@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Download, Sparkles } from 'lucide-react';
 import { useState } from 'react';
+import LazyImage from './LazyImage';
 
 const ImageGenCard = ({ imageUrl, prompt }) => {
     const [isLoaded, setIsLoaded] = useState(false);
@@ -33,15 +34,10 @@ const ImageGenCard = ({ imageUrl, prompt }) => {
 
             {/* Image Container */}
             <div className="relative aspect-square w-full bg-primary flex items-center justify-center overflow-hidden">
-                {!isLoaded && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                        <div className="w-6 h-6 rounded-full border-2 border-border border-t-purple-500 animate-spin" />
-                    </div>
-                )}
-                <img
+                <LazyImage
                     src={imageUrl}
                     alt={prompt}
-                    className={`w-full h-full object-cover transition-all duration-700 ${isLoaded ? 'opacity-100 blur-0' : 'opacity-0 blur-xl'}`}
+                    className="w-full h-full object-cover"
                     onLoad={() => setIsLoaded(true)}
                 />
             </div>

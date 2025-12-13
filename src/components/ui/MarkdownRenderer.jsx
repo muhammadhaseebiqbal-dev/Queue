@@ -7,6 +7,7 @@ import rehypeExternalLinks from 'rehype-external-links'
 import ThinkingBlock from './ThinkingBlock'
 import 'highlight.js/styles/github-dark.css'
 import 'katex/dist/katex.min.css'
+import LazyImage from './LazyImage'
 
 function MarkdownRenderer({ content, streaming = false, sources = [] }) {
     // 1. Pre-process content to linkify citations like [1], [2]
@@ -161,7 +162,7 @@ function MarkdownRenderer({ content, streaming = false, sources = [] }) {
                             <hr className="border-t border-border my-6" {...props} />
                         ),
                         img: ({ node, ...props }) => (
-                            <img className="max-w-full h-auto rounded-lg my-4" {...props} />
+                            <LazyImage className="max-w-full h-auto rounded-lg my-4" {...props} />
                         ),
                         strong: ({ node, ...props }) => (
                             <strong className="font-bold text-text" {...props} />
@@ -175,7 +176,7 @@ function MarkdownRenderer({ content, streaming = false, sources = [] }) {
                 </ReactMarkdown>
             )
         })}
-        </div>
+        </div >
     )
 }
 

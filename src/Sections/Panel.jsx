@@ -1,163 +1,380 @@
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { Plus, FolderOpen, MessageSquare, Plug, ChevronRight, Trash2, Clock } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import axios from 'axios'
 
-function Panel({ isPanelExpanded, setIsPanelExpanded }) {
+function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars }) {
     const [activeSection, setActiveSection] = useState('chats')
-    const [projects, setProjects] = useState([
-        { id: 1, name: 'My First Project', chats: 3 },
-        { id: 2, name: 'Research Notes', chats: 5 }
-    ])
-    const [chats, setChats] = useState([
-        { id: 1, title: 'Introduction to AI', timestamp: '2 hours ago' },
-        { id: 2, title: 'Code Review Help', timestamp: '5 hours ago' },
-        { id: 3, title: 'Math Problem Solving', timestamp: 'Yesterday' }
-    ])
+    const [projects, setProjects] = useState([])
+    const [chats, setChats] = useState([]) // Sessions
     const [connectors, setConnectors] = useState([
         { id: 1, name: 'Google Drive', status: 'disconnected' },
         { id: 2, name: 'GitHub', status: 'disconnected' }
     ])
 
+    // Fetch Sidebar Data
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                // Get userId from props
+                const userId = PanelInteractionVars.userId;
+                if (!userId) return; // Wait for userId to be available
+
+                const response = await axios.get(`http://localhost:5000/api/sidebar/${userId}`);
+                const { projects, sessions } = response.data;
+
+                setProjects(projects);
+                // Map sessions to UI format
+                setChats(sessions.map(s => ({
+                    id: s._id,
+                    title: s.title,
+                    timestamp: new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                })));
+
+            } catch (error) {
+                console.error("Error fetching sidebar data:", error);
+            }
+        }
+
+        if (isPanelExpanded) {
+            fetchData();
+        }
+    }, [isPanelExpanded, PanelInteractionVars.sidebarRefreshKey]);
+
+    const handleNewChat = async () => {
+        // Reset ChatArea state via parent
+        if (setIsPanelExpanded) { // Just checking prop existence
+            // Call parent setter if available (passed via rest props)
+            if (PanelInteractionVars.setActiveSessionId) {
+                PanelInteractionVars.setActiveSessionId(null);
+            }
+            // Clear active project for standard chats
+            if (PanelInteractionVars.setActiveProject) {
+                PanelInteractionVars.setActiveProject(null);
+            }
+        }
+        // Tell backend to reset context for this user
+        // We need userId here. It's stored in ChatArea but not Panel? 
+        // We typically store userId in localStorage or retrieve from context.
+        // For now, let's assume valid userId logic is handled in ChatArea's effect or we pass it down.
+        // Wait, Panel doesn't know userId directly unless we look at localStorage of ChatArea...
+        // Actually, easiest way: ChatArea listens to activeSessionId change, right? 
+        // Let ChatArea call the API because it owns the `userId` state.
+    }
+
+    // Project creation state
+    const [showProjectModal, setShowProjectModal] = useState(false);
+    const [newProjectName, setNewProjectName] = useState('');
+    const [newProjectColor, setNewProjectColor] = useState('#6366f1');
+    const [newProjectEmoji, setNewProjectEmoji] = useState('📁');
+    const [newProjectDescription, setNewProjectDescription] = useState('');
+
+    const handleCreateProject = async () => {
+        if (!newProjectName.trim()) return;
+
+        try {
+            const response = await axios.post('http://localhost:5000/api/projects', {
+                userId: PanelInteractionVars.userId,
+                name: newProjectName,
+                color: newProjectColor,
+                emoji: newProjectEmoji,
+                description: newProjectDescription
+            });
+
+            // Add to local state
+            setProjects(prev => [response.data, ...prev]);
+
+            // Reset and close modal
+            setNewProjectName('');
+            setNewProjectColor('#6366f1');
+            setNewProjectEmoji('📁');
+            setNewProjectDescription('');
+            setShowProjectModal(false);
+        } catch (error) {
+            console.error('Failed to create project:', error);
+        }
+    }
+
+    // Animation variants for tab content
+    const tabVariants = {
+        hidden: { opacity: 0, x: -20 },
+        visible: { opacity: 1, x: 0, transition: { duration: 0.2 } },
+        exit: { opacity: 0, x: 20, transition: { duration: 0.2 } }
+    };
+
     return (
-        <motion.div 
-            className="bg-secondary border-2 border-border h-screen overflow-hidden flex flex-col"
+        <motion.div
+            className="bg-secondary border-r-2 border-border h-screen overflow-hidden flex flex-col flex-shrink-0"
             initial={false}
-            animate={{ 
-                width: isPanelExpanded ? '20%' : '0%',
-                borderWidth: isPanelExpanded ? '2px' : '0px'
+            animate={{
+                width: isPanelExpanded ? '280px' : '0px',
+                opacity: isPanelExpanded ? 1 : 0
             }}
-            transition={{ 
+            transition={{
                 type: "spring",
                 stiffness: 300,
                 damping: 30,
                 mass: 0.8
             }}
         >
-            <div className="w-[300px] h-full flex flex-col">
+            <div className="w-full h-full flex flex-col">
                 {/* Header */}
-                <div className="p-4 border-b-2 border-border">
+                <div className="p-4 border-b-2 border-border bg-secondary">
                     <h2 className="text-lg font-bold text-text mb-4">QueueBot</h2>
-                    <button className="w-full bg-tertiary hover:bg-primary transition-colors border-2 border-border rounded-xl p-3 flex items-center gap-2 text-text">
+                    <button
+                        onClick={handleNewChat}
+                        className="w-full bg-tertiary hover:bg-primary transition-colors border-2 border-border rounded-xl p-3 flex items-center gap-2 text-text"
+                    >
                         <Plus size={18} />
                         <span className="text-sm font-medium">New Chat</span>
                     </button>
                 </div>
 
                 {/* Navigation Tabs */}
-                <div className="flex border-b-2 border-border">
-                    <button
-                        onClick={() => setActiveSection('chats')}
-                        className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                            activeSection === 'chats' 
-                                ? 'text-text border-b-2 border-text' 
-                                : 'text-textLight hover:text-text'
-                        }`}
-                    >
-                        Chats
-                    </button>
-                    <button
-                        onClick={() => setActiveSection('projects')}
-                        className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                            activeSection === 'projects' 
-                                ? 'text-text border-b-2 border-text' 
-                                : 'text-textLight hover:text-text'
-                        }`}
-                    >
-                        Projects
-                    </button>
-                    <button
-                        onClick={() => setActiveSection('connectors')}
-                        className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                            activeSection === 'connectors' 
-                                ? 'text-text border-b-2 border-text' 
-                                : 'text-textLight hover:text-text'
-                        }`}
-                    >
-                        Connect
-                    </button>
+                <div className="flex border-b-2 border-border p-0 gap-0 mx-0 mt-0 rounded-none bg-secondary">
+                    {['chats', 'projects', 'connectors'].map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveSection(tab)}
+                            className={`flex-1 py-3 text-sm font-medium transition-colors rounded-none capitalize ${activeSection === tab
+                                ? 'text-text border-b-2 border-text bg-tertiary'
+                                : 'text-textLight hover:text-text hover:bg-tertiary'
+                                }`}
+                        >
+                            {tab === 'connectors' ? 'Apps' : tab}
+                        </button>
+                    ))}
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-1 overflow-y-auto scrollbar-hide">
-                    {/* Chats Section */}
-                    {activeSection === 'chats' && (
-                        <div className="p-2">
-                            {chats.map((chat) => (
-                                <div
-                                    key={chat.id}
-                                    className="w-full p-3 mb-2 rounded-xl hover:bg-tertiary transition-colors flex items-start gap-2 group cursor-pointer"
-                                >
-                                    <MessageSquare size={16} className="text-textLight mt-1 flex-shrink-0" />
-                                    <div className="flex-1 text-left overflow-hidden">
-                                        <p className="text-sm text-text truncate">{chat.title}</p>
-                                        <p className="text-xs text-textLight mt-1">{chat.timestamp}</p>
+                <div className="flex-1 overflow-y-auto scrollbar-hide p-0 relative">
+                    <AnimatePresence mode="wait">
+                        {activeSection === 'chats' && (
+                            <motion.div
+                                key="chats"
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                variants={tabVariants}
+                                className="p-2 space-y-1 absolute w-full"
+                            >
+                                {chats.map((chat) => (
+                                    <div
+                                        key={chat.id}
+                                        onClick={() => {
+                                            PanelInteractionVars.setActiveSessionId(chat.id);
+                                            PanelInteractionVars.setActiveProject?.(null); // Clear project for regular chats
+                                        }}
+                                        className={`w-full p-3 rounded-xl transition-colors flex items-start gap-2 group cursor-pointer ${PanelInteractionVars?.activeSessionId === chat.id && !PanelInteractionVars?.activeProject
+                                            ? 'bg-[#1a1a1a]' // Dark solid background for active chat
+                                            : 'hover:bg-tertiary'
+                                            }`}
+                                    >
+                                        <MessageSquare size={16} className="text-textLight mt-1 flex-shrink-0" />
+                                        <div className="flex-1 text-left overflow-hidden">
+                                            <p className="text-sm text-text truncate font-medium">{chat.title}</p>
+                                            <p className="text-xs text-textLight mt-1">{chat.timestamp}</p>
+                                        </div>
+                                        <button className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Trash2 size={14} className="text-textLight hover:text-red-400" />
+                                        </button>
                                     </div>
-                                    <button className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <Trash2 size={14} className="text-textLight hover:text-red-400" />
+                                ))}
+                            </motion.div>
+                        )}
+
+                        {activeSection === 'projects' && (
+                            <motion.div
+                                key="projects"
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                variants={tabVariants}
+                                className="p-2 space-y-2 absolute w-full"
+                            >
+                                <div className="p-4 text-center border-2 border-dashed border-border rounded-xl m-2">
+                                    <FolderOpen size={32} className="text-textLight mx-auto mb-3" />
+                                    <p className="text-sm text-textLight mb-3">Group your research</p>
+                                    <button
+                                        onClick={() => setShowProjectModal(true)}
+                                        className="bg-tertiary hover:bg-primary transition-colors border-2 border-border rounded-lg px-4 py-2 text-sm text-text font-medium"
+                                    >
+                                        + Create Project
                                     </button>
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                                {projects.map((project) => (
+                                    <button
+                                        key={project._id || project.id}
+                                        onClick={async () => {
+                                            // Set active project
+                                            PanelInteractionVars.setActiveProject(project);
 
-                    {/* Projects Section */}
-                    {activeSection === 'projects' && (
-                        <div className="p-2">
-                            <div className="p-4 text-center">
-                                <FolderOpen size={40} className="text-textLight mx-auto mb-3" />
-                                <p className="text-sm text-textLight mb-4">Organize your chats into projects</p>
-                                <button className="bg-tertiary hover:bg-primary transition-colors border-2 border-border rounded-xl px-4 py-2 text-sm text-text">
-                                    Create Project
-                                </button>
-                            </div>
-                            {projects.map((project) => (
-                                <button
-                                    key={project.id}
-                                    className="w-full p-3 mb-2 rounded-xl hover:bg-tertiary transition-colors flex items-center justify-between"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <FolderOpen size={16} className="text-textLight" />
-                                        <span className="text-sm text-text">{project.name}</span>
-                                    </div>
-                                    <span className="text-xs text-textLight">{project.chats} chats</span>
-                                </button>
-                            ))}
-                        </div>
-                    )}
+                                            // Fetch sessions for this project to find the latest one
+                                            try {
+                                                const response = await axios.get(`http://localhost:5000/api/project/${project._id}/sessions`);
+                                                const sessions = response.data.sessions;
 
-                    {/* Connectors Section */}
-                    {activeSection === 'connectors' && (
-                        <div className="p-2">
-                            <div className="p-4 text-center mb-4">
-                                <Plug size={40} className="text-textLight mx-auto mb-3" />
-                                <p className="text-sm text-textLight">Connect external services for enhanced functionality</p>
-                            </div>
-                            {connectors.map((connector) => (
-                                <div
-                                    key={connector.id}
-                                    className="p-3 mb-2 rounded-xl bg-tertiary border-2 border-border flex items-center justify-between"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <Plug size={16} className="text-textLight" />
-                                        <span className="text-sm text-text">{connector.name}</span>
-                                    </div>
-                                    <button className="text-xs px-3 py-1 rounded-lg bg-primary border border-border text-textLight hover:text-text transition-colors">
-                                        {connector.status === 'connected' ? 'Connected' : 'Connect'}
+                                                if (sessions && sessions.length > 0) {
+                                                    // Continuous Chat: Load the most recent session
+                                                    console.log(`[Panel] Continuous mode: Resuming session ${sessions[0]._id}`);
+                                                    PanelInteractionVars.setActiveSessionId(sessions[0]._id);
+                                                } else {
+                                                    // No session exists, start clean (will create one on first message)
+                                                    console.log('[Panel] Continuous mode: Starting fresh project chat');
+                                                    PanelInteractionVars.setActiveSessionId(null);
+                                                }
+                                            } catch (error) {
+                                                console.error("Error fetching project sessions:", error);
+                                                PanelInteractionVars.setActiveSessionId(null);
+                                            }
+                                        }}
+                                        className={`w-full p-3 rounded-xl transition-colors flex items-center justify-between group ${PanelInteractionVars?.activeProject?._id === project._id
+                                                ? 'bg-[#1a1a1a]' // Dark solid background for active project
+                                                : 'hover:bg-tertiary'
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <span
+                                                className="text-lg flex-shrink-0"
+                                                style={{ filter: 'grayscale(1)' }}
+                                            >
+                                                {project.emoji || '📁'}
+                                            </span>
+                                            <span className="text-sm text-text font-medium">{project.name}</span>
+                                        </div>
+                                        <span className="text-xs text-textLight bg-primary px-2 py-0.5 rounded-full border border-border">{project.chats || 0}</span>
                                     </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                                ))}
+                            </motion.div>
+                        )}
+
+                        {activeSection === 'connectors' && (
+                            <motion.div
+                                key="connectors"
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                variants={tabVariants}
+                                className="p-2 space-y-2 absolute w-full"
+                            >
+                                {connectors.map((connector) => (
+                                    <div
+                                        key={connector.id}
+                                        className="p-3 rounded-xl bg-tertiary border-2 border-border flex items-center justify-between"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <Plug size={16} className="text-textLight" />
+                                            <span className="text-sm text-text font-medium">{connector.name}</span>
+                                        </div>
+                                        <div className={`text-xs px-2 py-1 rounded border border-border ${connector.status === 'connected' ? 'bg-green-500/20 text-green-400' : 'bg-primary text-textLight'}`}>
+                                            {connector.status === 'connected' ? 'Connected' : 'Disconnected'}
+                                        </div>
+                                    </div>
+                                ))}
+                                <button className="w-full py-2.5 text-xs font-medium text-textLight hover:text-text border-2 border-dashed border-border rounded-xl hover:bg-tertiary transition-colors">
+                                    + Add Connector
+                                </button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 border-t-2 border-border">
+                <div className="p-4 border-t-2 border-border bg-secondary">
                     <div className="flex items-center gap-2 text-textLight text-xs">
                         <Clock size={12} />
-                        <span>Last synced: Just now</span>
+                        <span>Synced</span>
                     </div>
                 </div>
             </div>
+
+            {/* Project Creation Modal */}
+            <AnimatePresence>
+                {showProjectModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+                        onClick={() => setShowProjectModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-secondary border-2 border-border rounded-2xl p-6 w-96 shadow-2xl"
+                        >
+                            <h3 className="text-lg font-bold text-text mb-4">Create New Project</h3>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-sm text-textLight mb-2 block">Project Name</label>
+                                    <input
+                                        type="text"
+                                        value={newProjectName}
+                                        onChange={(e) => setNewProjectName(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleCreateProject()}
+                                        placeholder="e.g., Research Papers"
+                                        className="w-full bg-primary border-2 border-border rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-text transition-colors"
+                                        autoFocus
+                                    />
+                                </div>
+
+
+                                <div>
+                                    <label className="text-sm text-textLight mb-2 block">Icon</label>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {['📁', '📚', '💼', '🎯', '🔬', '💡', '🎨', '⚡', '🚀', '📊', '🔧', '🌟'].map(emoji => (
+                                            <button
+                                                key={emoji}
+                                                onClick={() => setNewProjectEmoji(emoji)}
+                                                className={`w-10 h-10 rounded-lg transition-all text-2xl grayscale hover:grayscale-0 ${newProjectEmoji === emoji
+                                                    ? 'ring-2 ring-text ring-offset-2 ring-offset-secondary scale-110 grayscale-0'
+                                                    : ''
+                                                    }`}
+                                                style={{
+                                                    backgroundColor: newProjectEmoji === emoji ? newProjectColor + '20' : 'transparent',
+                                                    filter: newProjectEmoji === emoji ? 'none' : 'grayscale(1)'
+                                                }}
+                                            >
+                                                {emoji}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-sm text-textLight mb-2 block">Description (Context)</label>
+                                    <textarea
+                                        value={newProjectDescription}
+                                        onChange={(e) => setNewProjectDescription(e.target.value)}
+                                        placeholder="This context will be added to all chats in this project..."
+                                        className="w-full bg-primary border-2 border-border rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-text transition-colors resize-none"
+                                        rows={3}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-2 mt-6">
+                                <button
+                                    onClick={() => setShowProjectModal(false)}
+                                    className="flex-1 bg-primary hover:bg-tertiary border-2 border-border rounded-lg px-4 py-2 text-sm text-text font-medium transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleCreateProject}
+                                    disabled={!newProjectName.trim()}
+                                    className="flex-1 bg-text hover:bg-text/90 border-2 border-text rounded-lg px-4 py-2 text-sm text-primary font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Create
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </motion.div>
     )
 }

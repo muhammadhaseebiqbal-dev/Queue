@@ -9,14 +9,13 @@ import { detectSearchIntent } from './utils/intent.js';
 import { getWeatherData } from './utils/weather.js';
 
 import { parseFileContent } from './utils/fileParser.js';
+import { connectDB, Project, Session, Message, isConnected } from './models.js'; // Import Models
 import multer from 'multer';
-import fs from 'fs'; // Required for Groq audio API (file stream) OR we can use buffer if SDK supports it? 
-// Wait, user said "dont use fs to store file use only the memory record sound in memory and directly pass."
-// Groq SDK `client.audio.transcriptions.create` expects a `file` argument which can be `(filename, buffer)`.
-// So we don't need fs to write to disk, but might need it for types if TS, but this is JS.
-// We need imports.
+import fs from 'fs';
 
 dotenv.config({ override: true });
+connectDB(); // Initialize DB
+
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 
@@ -32,8 +31,73 @@ const deepMindSessions = {}; // Store DeepMind processing sessions
 const MAX_CONTEXT_TOKENS = 4000;
 const CONTEXT_WARNING_THRESHOLD = 3000;
 
+// Cloudinary Helper (Dynamic Import)
+async function uploadToCloudinary(base64OrUrl) {
+    // Check if configuration exists
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY) {
+        return null;
+    }
+
+    try {
+        const cloudinary = await import('cloudinary');
+        cloudinary.v2.config({
+            cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+            api_key: process.env.CLOUDINARY_API_KEY,
+            api_secret: process.env.CLOUDINARY_API_SECRET
+        });
+
+        console.log('[Cloudinary] Uploading image...');
+        const result = await cloudinary.v2.uploader.upload(base64OrUrl, {
+            folder: 'queuebot_uploads',
+            resource_type: 'auto'
+        });
+        console.log(`[Cloudinary] Upload success: ${result.secure_url}`);
+        return result.secure_url;
+    } catch (error) {
+        console.warn("[Cloudinary] Upload failed:", error.message);
+        return null; // Fallback
+    }
+}
+
+// In-Memory Storage (Fallback when DB is disconnected)
+const memorySessions = [];
+const memoryProjects = [];
+
+// Helper to update memory session
+function updateMemorySession(userId, sessionId, messages) {
+    const sessionIndex = memorySessions.findIndex(s => s._id === sessionId);
+    const existing = sessionIndex >= 0 ? memorySessions[sessionIndex] : null;
+
+    // Generate Title from first user message
+    const firstUserMsg = messages.find(m => m.role === 'user');
+    const title = firstUserMsg ? firstUserMsg.content.substring(0, 30) : 'New Chat';
+    const preview = messages[messages.length - 1]?.content.substring(0, 50) || '...';
+
+    if (existing) {
+        memorySessions[sessionIndex] = {
+            ...existing,
+            title: existing.title === 'New Chat' ? title : existing.title, // Update title if it was generic
+            preview,
+            updatedAt: new Date(),
+            messages: messages // Keep messages in memory for retrieval
+        };
+    } else {
+        // Create new if not found (should be rare if created via API, but good for safety)
+        memorySessions.push({
+            _id: sessionId || `mem_${Date.now()}`,
+            userId,
+            title,
+            preview,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            messages: messages,
+            isArchived: false,
+            model: 'llama-3.3-70b'
+        });
+    }
+}
+
 // DeepMind: Helper to select random models (excludes non-Groq models like Gemini)
-// DeepMind: Helper to select random models (excludes non-Groq models like Gemini and Vision models)
 function selectRandomModels(count = 3, exclude = []) {
     const allModels = Object.keys(MODEL_CONFIGS).filter(m =>
         !exclude.includes(m) &&
@@ -106,25 +170,151 @@ async function summarizeContext(messages, modelKey = 'llama-3.3-70b') {
 }
 
 // Save or update chat context
-app.post('/context/save', (req, res) => {
-    const { userId, messages } = req.body;
+app.post('/context/save', async (req, res) => {
+    const { userId, messages, projectId } = req.body; // Extract projectId
 
     if (!userId || !messages) {
         return res.status(400).json({ error: 'userId and messages are required' });
     }
 
+    // Save to Memory
+    // Save to Memory (Merge to preserve locks)
     chatContexts[userId] = {
+        ...chatContexts[userId],
         messages: messages,
         lastUpdated: new Date().toISOString(),
-        tokenCount: getContextSize(messages)
+        tokenCount: getContextSize(messages),
+        sessionId: chatContexts[userId]?.sessionId || null
     };
+
+    let isNewSession = false;
+
+    // Auto-Save Strategy
+    console.log(`[Context Save] userId: ${userId.substring(0, 8)}, existingSessionId: ${chatContexts[userId]?.sessionId || 'NONE'}, isConnected: ${isConnected}`);
+
+    if (!isConnected) {
+        console.log('[Context Save] DB disconnected, using Memory Store');
+        // Fallback: Save to In-Memory Session Store for Sidebar display
+        if (!chatContexts[userId].sessionId) {
+            chatContexts[userId].sessionId = `mem_${Date.now()}`;
+            isNewSession = true;
+        }
+        updateMemorySession(userId, chatContexts[userId].sessionId, messages);
+    } else {
+        // Save to MongoDB - AWAIT to ensure session is created before responding
+        try {
+            let sessionId = chatContexts[userId].sessionId;
+
+            // If no session exists for this user in memory, create new with locking
+            if (!sessionId) {
+                if (chatContexts[userId].sessionCreationPromise) {
+                    // Wait for pending creation (lock)
+                    console.log(`[Context Save] Waiting for session creation lock...`);
+                    sessionId = await chatContexts[userId].sessionCreationPromise;
+                    chatContexts[userId].sessionId = sessionId;
+                } else {
+                    // Create lock
+                    isNewSession = true;
+                    chatContexts[userId].sessionCreationPromise = (async () => {
+                        const firstUserMsg = messages.find(m => m.role === 'user');
+
+                        // Generate AI title using Groq
+                        let title = 'New Conversation';
+                        if (firstUserMsg) {
+                            try {
+                                const titleCompletion = await groq.chat.completions.create({
+                                    messages: [
+                                        {
+                                            role: 'system',
+                                            content: 'You are a title generator. Create a concise 3-5 word title that captures the essence of the user\'s query. Return ONLY the title, no quotes or punctuation.'
+                                        },
+                                        {
+                                            role: 'user',
+                                            content: `Generate a title for this query: "${firstUserMsg.content}"`
+                                        }
+                                    ],
+                                    model: 'llama-3.3-70b-versatile',
+                                    temperature: 0.7,
+                                    max_completion_tokens: 20,
+                                });
+                                title = titleCompletion.choices[0]?.message?.content?.trim() || firstUserMsg.content.substring(0, 30);
+                            } catch (err) {
+                                console.error('[Title Generation] Failed:', err);
+                                title = firstUserMsg.content.substring(0, 30);
+                            }
+                        }
+
+                        const newSession = await Session.create({
+                            userId,
+                            projectId: projectId || null, // Associate session with project
+                            title,
+                            preview: messages[messages.length - 1]?.content.substring(0, 50) || '...',
+                            updatedAt: new Date()
+                        });
+                        console.log(`[Context Save] Created NEW Session: ${newSession._id} - "${title}"`);
+                        return newSession._id;
+                    })();
+
+                    // Wait for completion and assign
+                    try {
+                        sessionId = await chatContexts[userId].sessionCreationPromise;
+                        chatContexts[userId].sessionId = sessionId;
+                    } finally {
+                        // Release lock
+                        setTimeout(() => {
+                            if (chatContexts[userId]) {
+                                delete chatContexts[userId].sessionCreationPromise;
+                            }
+                        }, 1000);
+                    }
+                }
+            } else {
+                // Update existing session preview
+                await Session.findByIdAndUpdate(sessionId, {
+                    updatedAt: new Date(),
+                    preview: messages[messages.length - 1]?.content.substring(0, 50) || '...',
+                });
+                console.log(`[Context Save] Updated Session: ${sessionId}`);
+            }
+
+            // Save individual messages to DB (async, don't wait)
+            (async () => {
+                const messagesToSave = messages
+                    .filter(m => m.role === 'user' || m.role === 'assistant')
+                    .map(msg => ({
+                        sessionId: chatContexts[userId].sessionId,
+                        role: msg.role,
+                        content: msg.content || (msg.type === 'image_generated' ? '[Image Generated]' : ' '),
+                        // New fields for structured image content
+                        type: msg.type || 'text',
+                        generatedImage: msg.generatedImage || undefined,
+                        model: msg.model || 'unknown',
+                        mode: msg.mode || 'standard',
+                        timestamp: new Date()
+                    }));
+
+                await Message.deleteMany({ sessionId: chatContexts[userId].sessionId });
+                if (messagesToSave.length > 0) {
+                    await Message.insertMany(messagesToSave);
+                    console.log(`[Context Save] Saved ${messagesToSave.length} messages to DB`);
+                }
+            })().catch(err => console.error('[Message Save] Error:', err));
+
+        } catch (dbErr) {
+            console.error('DB Auto-Save Error:', dbErr);
+        }
+    }
 
     // Debug: Check if hiddenContent is being saved
     const hasHidden = messages.some(m => m.hiddenContent);
     if (hasHidden) console.log(`[Context Save] Saved context with hiddenContent for user ${userId.substring(0, 5)}...`);
 
+    console.log(`[Context Save] Responding with sessionId: ${chatContexts[userId]?.sessionId}, isNewSession: ${isNewSession}`);
+
     res.json({
         success: true,
+        sessionId: chatContexts[userId]?.sessionId,
+        isNewSession: isNewSession,
         tokenCount: chatContexts[userId].tokenCount,
         needsSummarization: chatContexts[userId].tokenCount > CONTEXT_WARNING_THRESHOLD
     });
@@ -133,7 +323,7 @@ app.post('/context/save', (req, res) => {
 // Get chat context
 app.get('/context/:userId', (req, res) => {
     const { userId } = req.params;
-    const context = chatContexts[userId];
+    const context = chatContexts[userId]; // In future: Load from `Message.find({ sessionId })`
 
     if (!context) {
         return res.json({ messages: [], tokenCount: 0 });
@@ -235,10 +425,26 @@ app.get('/models', async (req, res) => {
 
 app.post('/prepare-stream', async (req, res) => {
     const streamId = Date.now().toString() + Math.random().toString(36).substring(7);
-    const { userId, messages } = req.body;
+    const { userId, messages, projectId } = req.body;
 
     // Get stored context and merge with current messages
     let contextMessages = messages || [];
+
+    // Inject Project Context if this is a new session
+    if (projectId && (!chatContexts[userId] || chatContexts[userId].messages.length === 0)) {
+        try {
+            const project = await Project.findById(projectId);
+            if (project && project.description) {
+                console.log(`[Stream] Injecting context from project: ${project.name}`);
+                contextMessages.unshift({
+                    role: 'system',
+                    content: `[PROJECT CONTEXT: ${project.name}]\n${project.description}\n\n(Use this context to guide your responses for this conversation)`
+                });
+            }
+        } catch (err) {
+            console.error('[Stream] Failed to load project context:', err);
+        }
+    }
 
     if (userId && chatContexts[userId]) {
         const storedContext = chatContexts[userId];
@@ -251,6 +457,8 @@ app.post('/prepare-stream', async (req, res) => {
 
             if (summary) {
                 // Replace old context with summary
+                // We might want to re-inject project context here if we want it to persist strongly
+                // For now, relying on summary to capture essence
                 contextMessages = [
                     {
                         role: 'system',
@@ -329,6 +537,16 @@ app.get('/stream/:id', async (req, res) => {
 
         // Handle File Attachment
         if (payload.attachment) {
+
+            // <<< CLOUDINARY UPLOAD FOR ATTACHMENT >>>
+            if (payload.attachment.content) {
+                const secureUrl = await uploadToCloudinary(payload.attachment.content);
+                if (secureUrl) {
+                    payload.attachment.content = secureUrl;
+                    console.log('[Attachment] Replaced Base64 with Cloudinary URL');
+                }
+            }
+
             // Case A: Image -> Switch to Vision Model
             if (payload.attachment.type.startsWith('image/')) {
                 console.log("Attachment is Image - Switching to Vision Model (Llama-4 Maverick)");
@@ -365,9 +583,9 @@ app.get('/stream/:id', async (req, res) => {
 
         // Case 1: Explicit Web Search Enabled (Force GPT-OSS-120B)
         if (payload.isWebSearchEnabled) {
-            console.log("Explicit Web Search Enabled - Forcing gpt-oss-120b");
+            console.log("Explicit Web Search Enabled - Forcing llama-3.3-70b-versatile");
             shouldSearch = true;
-            modelKey = 'gpt-oss-120b'; // Force model override
+            modelKey = 'llama-3.3-70b-versatile'; // Force model override
         }
         // Case 2: Intelligent Auto-Detection (If DeepMind is OFF and Explicit is OFF)
         else if (!payload.isDeepMindEnabled) {
@@ -425,7 +643,14 @@ app.get('/stream/:id', async (req, res) => {
                 // 2. Construct Pollinations URL with Enhanced Prompt
                 const finalPrompt = enhancedPrompt;
                 // Use model 'flux-realism' for high quality results as requested
-                const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=1024&height=1024&nologo=true&model=flux-realism`;
+                let imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=1024&height=1024&nologo=true&model=flux-realism`;
+
+                // <<< CLOUDINARY UPLOAD FOR GENERATED IMAGE >>>
+                const secureUrl = await uploadToCloudinary(imageUrl);
+                if (secureUrl) {
+                    imageUrl = secureUrl; // Use persistent URL
+                    console.log('[Image Gen] Persisted to Cloudinary');
+                }
 
                 // 3. Send Image Event
                 res.write(`data: ${JSON.stringify({
@@ -660,7 +885,130 @@ app.post('/deepmind/prepare', async (req, res) => {
     res.json({ sessionId, session: deepMindSessions[sessionId] });
 });
 
-// DeepMind: Stream multi-phase processing
+// --- Database APIs ---
+// Reset Session for User (New Chat)
+app.post('/api/session/reset', (req, res) => {
+    const { userId } = req.body;
+    if (chatContexts[userId]) {
+        chatContexts[userId] = {
+            ...chatContexts[userId],
+            sessionId: null, // Clear active session ID
+            messages: []     // Clear active context
+        };
+    }
+    res.json({ success: true });
+});
+
+// Get Messages for a Session
+app.get('/api/messages/:sessionId', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+
+        if (!isConnected) {
+            // Fallback: Return from memory if available
+            const memSession = memorySessions.find(s => s._id === sessionId);
+            return res.json({ messages: memSession?.messages || [] });
+        }
+
+        const messages = await Message.find({ sessionId }).sort({ timestamp: 1 });
+        res.json({ messages });
+    } catch (error) {
+        console.error('[Messages API] Error:', error);
+        res.status(500).json({ error: 'Failed to fetch messages' });
+    }
+});
+
+// Activate an existing session (when user clicks a chat in sidebar)
+app.post('/api/session/activate', (req, res) => {
+    const { userId, sessionId } = req.body;
+    if (chatContexts[userId]) {
+        chatContexts[userId].sessionId = sessionId;
+        console.log(`[Session Activate] User ${userId} activated session ${sessionId}`);
+    }
+    res.json({ success: true });
+});
+
+// Get Sidebar Data (Projects + Recent Sessions)
+app.get('/api/sidebar/:userId', async (req, res) => {
+    try {
+        if (!isConnected) {
+            const userSessions = memorySessions
+                .filter(s => s.userId === req.params.userId && !s.isArchived)
+                .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+            return res.json({ projects: [], sessions: userSessions });
+        }
+
+        const { userId } = req.params;
+        const projects = await Project.find({ userId }).sort({ createdAt: -1 });
+        // Only fetch sessions WITHOUT projectId for standard chat tab
+        const sessions = await Session.find({ userId, isArchived: false, projectId: null })
+            .sort({ updatedAt: -1 })
+            .limit(20); // Limit to 20 recent chats
+
+        // Count chats per project
+        const projectdata = await Promise.all(projects.map(async (p) => {
+            const count = await Session.countDocuments({ projectId: p._id });
+            return { ...p.toObject(), chats: count };
+        }));
+
+        res.json({ projects: projectdata, sessions });
+    } catch (error) {
+        console.error('Sidebar API Error:', error);
+        res.status(500).json({ error: 'Failed to fetch sidebar data' });
+    }
+});
+
+// Get Sessions for a Specific Project
+app.get('/api/project/:projectId/sessions', async (req, res) => {
+    try {
+        const { projectId } = req.params;
+
+        if (!isConnected) {
+            const projectSessions = memorySessions
+                .filter(s => s.projectId === projectId && !s.isArchived)
+                .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+            return res.json({ sessions: projectSessions });
+        }
+
+        const sessions = await Session.find({ projectId, isArchived: false })
+            .sort({ updatedAt: -1 })
+            .limit(20);
+
+        res.json({ sessions });
+    } catch (error) {
+        console.error('Project Sessions API Error:', error);
+        res.status(500).json({ error: 'Failed to fetch project sessions' });
+    }
+});
+
+// Create Project
+app.post('/api/projects', async (req, res) => {
+    try {
+        const { userId, name, color, emoji, description } = req.body;
+        const project = await Project.create({ userId, name, color, emoji, description });
+        res.json(project);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Create New Session
+app.post('/api/sessions', async (req, res) => {
+    try {
+        const { userId, projectId, title, model } = req.body;
+        const session = await Session.create({
+            userId,
+            projectId: projectId || null,
+            title: title || 'New Chat',
+            model: model || 'llama-3.3-70b'
+        });
+        res.json(session);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// DeepMind: Start a multi-model session
 app.get('/deepmind/stream/:sessionId', async (req, res) => {
     const { sessionId } = req.params;
     const session = deepMindSessions[sessionId];
