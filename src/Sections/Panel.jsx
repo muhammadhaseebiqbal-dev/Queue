@@ -95,6 +95,27 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
         }
     }
 
+    const handleDeleteChat = async (chatId, event) => {
+        // Prevent triggering the chat selection
+        event.stopPropagation();
+
+        try {
+            await axios.delete(`http://localhost:5000/api/session/${chatId}?userId=${PanelInteractionVars.userId}`);
+
+            // Remove from local state
+            setChats(prev => prev.filter(chat => chat.id !== chatId));
+
+            // If this was the active chat, clear it
+            if (PanelInteractionVars.activeSessionId === chatId) {
+                PanelInteractionVars.setActiveSessionId(null);
+            }
+
+            console.log(`[Panel] Deleted chat ${chatId}`);
+        } catch (error) {
+            console.error('Failed to delete chat:', error);
+        }
+    }
+
     // Animation variants for tab content
     const tabVariants = {
         hidden: { opacity: 0, x: -20 },
@@ -175,7 +196,10 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                                             <p className="text-sm text-text truncate font-medium">{chat.title}</p>
                                             <p className="text-xs text-textLight mt-1">{chat.timestamp}</p>
                                         </div>
-                                        <button className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                            onClick={(e) => handleDeleteChat(chat.id, e)}
+                                            className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
                                             <Trash2 size={14} className="text-textLight hover:text-red-400" />
                                         </button>
                                     </div>
@@ -229,8 +253,8 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                                             }
                                         }}
                                         className={`w-full p-3 rounded-xl transition-colors flex items-center justify-between group ${PanelInteractionVars?.activeProject?._id === project._id
-                                                ? 'bg-[#1a1a1a]' // Dark solid background for active project
-                                                : 'hover:bg-tertiary'
+                                            ? 'bg-[#1a1a1a]' // Dark solid background for active project
+                                            : 'hover:bg-tertiary'
                                             }`}
                                     >
                                         <div className="flex items-center gap-2">

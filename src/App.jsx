@@ -1,42 +1,32 @@
-import { useState } from "react";
-import AiInput from "./components/ui/AiInput";
-import ChatArea from "./Sections/ChatArea";
-import Drawer from "./Sections/Panel";
-import { nanoid } from "nanoid";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { GoogleOAuthProvider } from '@react-oauth/google';
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/auth/ProtectedRoute';
+import Workspace from "./Workspace";
+import LandingPage from "./LandingPage";
+import SignIn from "./SignIn";
 
 function App() {
-  const [isPanelExpanded, setIsPanelExpanded] = useState(true)
-  const [activeSessionId, setActiveSessionId] = useState(null)
-  const [userId] = useState(() => {
-    // Try to get from localStorage first for persistence across reloads
-    const saved = localStorage.getItem("queuebot_userid");
-    if (saved) return saved;
-    const newId = nanoid();
-    localStorage.setItem("queuebot_userid", newId);
-    return newId;
-  })
-
-  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0)
-  const [activeProject, setActiveProject] = useState(null)
-
-  const PanelInteractionVars = {
-    isPanelExpanded: isPanelExpanded,
-    setIsPanelExpanded,
-    activeSessionId,
-    setActiveSessionId,
-    userId,
-    sidebarRefreshKey,
-    triggerSidebarRefresh: () => setSidebarRefreshKey(prev => prev + 1),
-    activeProject,
-    setActiveProject
-  }
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_CLIENT_ID";
 
   return (
-    <div className="w-full h-screen flex overflow-hidden bg-primary">
-      <Drawer {...PanelInteractionVars} />
-      <ChatArea {...PanelInteractionVars} />
-    </div>
-  )
+    <GoogleOAuthProvider clientId={googleClientId}>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/signin" element={<SignIn />} />
+
+            <Route element={<ProtectedRoute />}>
+              <Route path="/app" element={<Workspace />} />
+            </Route>
+
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </GoogleOAuthProvider>
+  );
 }
 
-export default App
+export default App;

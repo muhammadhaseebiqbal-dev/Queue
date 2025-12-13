@@ -19,6 +19,16 @@ export const connectDB = async () => {
 
 // --- Schemas ---
 
+// User Schema
+const userSchema = new mongoose.Schema({
+    userId: { type: String, required: true, unique: true, index: true }, // Firebase UID
+    email: { type: String, required: true },
+    displayName: { type: String },
+    photoURL: { type: String },
+    createdAt: { type: Date, default: Date.now },
+    lastLogin: { type: Date, default: Date.now }
+});
+
 // Project Schema (Folders)
 const projectSchema = new mongoose.Schema({
     userId: { type: String, required: true, index: true }, // We'll use a simple string ID for now (or auth ID later)
@@ -68,6 +78,7 @@ const messageSchema = new mongoose.Schema({
 });
 
 // Models
+export const User = mongoose.model('User', userSchema);
 export const Project = mongoose.model('Project', projectSchema);
 export const Session = mongoose.model('Session', sessionSchema);
 export const Message = mongoose.model('Message', messageSchema);

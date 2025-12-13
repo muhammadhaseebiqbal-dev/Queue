@@ -9,7 +9,10 @@ import { detectSearchIntent } from './utils/intent.js';
 import { getWeatherData } from './utils/weather.js';
 
 import { parseFileContent } from './utils/fileParser.js';
-import { connectDB, Project, Session, Message, isConnected } from './models.js'; // Import Models
+import { connectDB, Project, Session, Message, User, isConnected } from './models.js'; // Import Models
+import { OAuth2Client } from 'google-auth-library';
+import jwt from 'jsonwebtoken';
+import { authMiddleware } from './middleware/auth.js';
 import multer from 'multer';
 import fs from 'fs';
 
@@ -588,7 +591,8 @@ app.get('/stream/:id', async (req, res) => {
             modelKey = 'llama-3.3-70b-versatile'; // Force model override
         }
         // Case 2: Intelligent Auto-Detection (If DeepMind is OFF and Explicit is OFF)
-        else if (!payload.isDeepMindEnabled) {
+        // SKIP if we have an Image Attachment (Explicit Vision Intent)
+        else if (!payload.isDeepMindEnabled && (!payload.attachment || !payload.attachment.type.startsWith('image/'))) {
             // Check for intent (Pass full message history for context)
             const intentData = await detectSearchIntent(payload.messages || payload.message || finalMessages[finalMessages.length - 1].content);
             const intent = intentData.category;
@@ -928,8 +932,41 @@ app.post('/api/session/activate', (req, res) => {
     res.json({ success: true });
 });
 
+// Delete a chat session
+app.delete('/api/session/:sessionId', authMiddleware, async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const { userId } = req.query;
+
+        if (!isConnected) {
+            // Memory mode: Remove from memory
+            const sessionIndex = memorySessions.findIndex(s => s._id === sessionId);
+            if (sessionIndex !== -1) {
+                memorySessions.splice(sessionIndex, 1);
+            }
+            return res.json({ success: true });
+        }
+
+        // Database mode: Delete session and associated messages
+        await Session.findByIdAndDelete(sessionId);
+        await Message.deleteMany({ sessionId });
+
+        // Clear from active context if this was the active session
+        if (chatContexts[userId] && chatContexts[userId].sessionId === sessionId) {
+            chatContexts[userId].sessionId = null;
+            chatContexts[userId].messages = [];
+        }
+
+        console.log(`[Session Delete] Deleted session ${sessionId}`);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('[Session Delete] Error:', error);
+        res.status(500).json({ error: 'Failed to delete session' });
+    }
+});
+
 // Get Sidebar Data (Projects + Recent Sessions)
-app.get('/api/sidebar/:userId', async (req, res) => {
+app.get('/api/sidebar/:userId', authMiddleware, async (req, res) => {
     try {
         if (!isConnected) {
             const userSessions = memorySessions
@@ -955,6 +992,62 @@ app.get('/api/sidebar/:userId', async (req, res) => {
     } catch (error) {
         console.error('Sidebar API Error:', error);
         res.status(500).json({ error: 'Failed to fetch sidebar data' });
+    }
+});
+
+// Sync User Profile (Login) for Persistence
+// Auth: Google Login
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+app.post('/api/auth/google', async (req, res) => {
+    try {
+        const { accessToken } = req.body;
+        
+        // Fetch User Info using Access Token
+        const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch user info from Google');
+        }
+
+        const data = await response.json();
+        const { sub: googleId, email, name, picture } = data;
+        
+        // Sync User in DB
+        let user = null;
+        if (isConnected) {
+            user = await User.findOne({ userId: googleId }); // Use googleId as userId
+            if (!user) {
+                user = await User.create({
+                    userId: googleId,
+                    email,
+                    displayName: name,
+                    photoURL: picture
+                });
+            } else {
+                // Update profile
+                user.lastLogin = new Date();
+                user.photoURL = picture;
+                await user.save();
+            }
+        } else {
+            // Fallback for memory mode (Mock user)
+            user = { userId: googleId, email, displayName: name, photoURL: picture };
+        }
+
+        // Generate Session JWT
+        const token = jwt.sign(
+            { userId: googleId, email },
+            process.env.JWT_SECRET || 'dev_secret_key_123',
+            { expiresIn: '7d' }
+        );
+
+        res.json({ token, user });
+    } catch (error) {
+        console.error('Auth Error:', error);
+        res.status(401).json({ error: 'Authentication Failed' });
     }
 });
 
