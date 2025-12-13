@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import axios from "axios"
 
-function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment, activeProject }) {
+function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, toggleDeepMind, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment, activeProject, handleSend }) {
 
     const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
     const dropdownRef = useRef(null)
@@ -165,8 +165,14 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
     }, [])
 
     const toggleChatStatus = () => {
-        setIsChatStarted(isChatStarted)
-        setIsSendPrompt(true)
+        if (setIsChatStarted) {
+            setIsChatStarted(true)
+        }
+        if (handleSend) {
+            handleSend()
+        } else if (setIsSendPrompt) {
+            setIsSendPrompt(true)
+        }
     }
 
     const handlepromptInput = (e) => {
@@ -175,7 +181,18 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
 
     const handleKeyDown = (e) => {
         if (e.key === 'Enter') {
-            toggleChatStatus();
+            triggerSend();
+        }
+    }
+
+    const triggerSend = () => {
+        if (setIsChatStarted) {
+            setIsChatStarted(true);
+        }
+        if (handleSend) {
+            handleSend();
+        } else if (setIsSendPrompt) {
+            setIsSendPrompt(true);
         }
     }
 
@@ -231,7 +248,7 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.9 }}
-                        className="absolute top-[-50px] left-0 bg-secondary/95 backdrop-blur-md border border-white/10 px-4 py-2 rounded-xl flex items-center gap-3 shadow-xl z-10"
+                        className="absolute top-[-60px] left-0 bg-secondary/95 backdrop-blur-md border border-white/10 px-4 py-2 rounded-xl flex items-center gap-3 shadow-xl z-10"
                     >
                         <div className={`p-2 rounded-lg ${attachment.type.startsWith('image/') ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>
                             {attachment.type.startsWith('image/') ? <ImageIcon size={16} /> : <FileText size={16} />}
@@ -313,7 +330,7 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                                     borderColor: isDeepMindEnabled ? '#3b82f6' : '#191919'
                                 }}
                                 exit={{ width: 0, opacity: 0, scale: 0.8 }}
-                                onClick={() => setIsDeepMindEnabled(!isDeepMindEnabled)}
+                                onClick={() => toggleDeepMind ? toggleDeepMind() : setIsDeepMindEnabled(!isDeepMindEnabled)}
                                 transition={{ type: "spring", stiffness: 400, damping: 25 }}
                                 className={`bg-tertiary h-11 rounded-2xl border-2 flex justify-center items-center overflow-hidden cursor-pointer ${isDeepMindEnabled ? 'text-blue-400 px-3 gap-2' : 'text-text'
                                     }`}
@@ -354,56 +371,30 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.9 }}
-                            className="absolute inset-0 bg-black/60 backdrop-blur-xl rounded-2xl flex flex-col justify-center items-center z-50"
+                            className="absolute inset-0 bg-black/80 backdrop-blur-xl rounded-2xl flex flex-col justify-center items-center z-50"
                         >
-                            {/* Continuous Sine Wave Visualization */}
-                            <div className="relative w-56 h-20 mb-3">
-                                {/* Multiple layered sine waves for depth */}
-                                {[0, 1, 2].map((layer) => (
-                                    <motion.div
-                                        key={layer}
-                                        className="absolute inset-0"
-                                        style={{
-                                            background: `radial-gradient(ellipse at center, ${layer === 0 ? 'rgba(59, 130, 246, 0.3)' :
-                                                layer === 1 ? 'rgba(139, 92, 246, 0.25)' :
-                                                    'rgba(236, 72, 153, 0.2)'
-                                                } 0%, transparent 70%)`,
-                                            filter: 'blur(6px)',
-                                        }}
-                                        animate={{
-                                            scaleX: [1, 1.15, 1],
-                                            scaleY: [1, 1.2, 1],
-                                            opacity: [0.4, 0.7, 0.4],
-                                        }}
-                                        transition={{
-                                            duration: 2 + layer * 0.5,
-                                            repeat: Infinity,
-                                            ease: "easeInOut",
-                                            delay: layer * 0.2,
-                                        }}
-                                    />
-                                ))}
-
-                                {/* SVG Sine Waves */}
+                            {/* Minimal Sine Wave Visualization */}
+                            <div className="relative w-48 h-16 flex items-center justify-center">
                                 <svg className="w-full h-full" viewBox="0 0 200 50" preserveAspectRatio="xMidYMid meet">
-                                    {[0, 1, 2].map((wave) => (
+                                    {[0, 1].map((wave) => (
                                         <motion.path
                                             key={wave}
-                                            d={`M 0 25 Q 25 ${16 - wave * 2} 50 25 T 100 25 T 150 25 T 200 25`}
+                                            d={`M 0 25 Q 50 15 100 25 T 200 25`}
                                             fill="none"
-                                            stroke={wave === 0 ? '#3b82f6' : wave === 1 ? '#8b5cf6' : '#ec4899'}
-                                            strokeWidth="2.5"
+                                            stroke={wave === 0 ? '#fafafa' : '#71717a'} // White & Zinc-500
+                                            strokeWidth={wave === 0 ? "2" : "1.5"}
                                             strokeLinecap="round"
-                                            opacity={0.9 - wave * 0.2}
+                                            initial={{ opacity: 0 }}
                                             animate={{
                                                 d: [
-                                                    `M 0 25 Q 25 ${16 - wave * 2} 50 25 T 100 25 T 150 25 T 200 25`,
-                                                    `M 0 25 Q 25 ${34 + wave * 2} 50 25 T 100 25 T 150 25 T 200 25`,
-                                                    `M 0 25 Q 25 ${16 - wave * 2} 50 25 T 100 25 T 150 25 T 200 25`,
+                                                    `M 0 25 Q 50 ${15 - wave * 5} 100 25 T 200 25`,
+                                                    `M 0 25 Q 50 ${35 + wave * 5} 100 25 T 200 25`,
+                                                    `M 0 25 Q 50 ${15 - wave * 5} 100 25 T 200 25`,
                                                 ],
+                                                opacity: [0.3, 0.8, 0.3]
                                             }}
                                             transition={{
-                                                duration: 1.5 + wave * 0.3,
+                                                duration: 1.5 + wave * 0.2,
                                                 repeat: Infinity,
                                                 ease: "easeInOut",
                                             }}
@@ -411,23 +402,6 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                                     ))}
                                 </svg>
                             </div>
-
-                            <motion.span
-                                className="text-white font-semibold tracking-widest uppercase text-sm"
-                                animate={{ opacity: [0.6, 1, 0.6] }}
-                                transition={{ duration: 2, repeat: Infinity }}
-                            >
-                                Listening...
-                            </motion.span>
-
-                            <motion.p
-                                className="text-white/60 text-xs mt-2"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 0.7 }}
-                                transition={{ delay: 0.5 }}
-                            >
-                                Auto-stops after silence
-                            </motion.p>
                         </motion.div>
                     )}
                 </AnimatePresence>

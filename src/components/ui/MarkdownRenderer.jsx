@@ -176,6 +176,9 @@ function MarkdownRenderer({ content, streaming = false, sources = [] }) {
                 </ReactMarkdown>
             )
         })}
+            {streaming && (
+                <span className="inline-block ml-1 animate-pulse font-bold text-text">_</span>
+            )}
         </div >
     )
 }

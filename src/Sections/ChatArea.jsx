@@ -1,4 +1,4 @@
-import { Copy, Sparkles, Image as ImageIcon, FileText, PanelRightOpen } from "lucide-react";
+import { Copy, Sparkles, Image as ImageIcon, FileText, PanelRightOpen, X, ThumbsUp, ThumbsDown } from "lucide-react";
 import AiInput from "../components/ui/AiInput"
 import MarkdownRenderer from "../components/ui/MarkdownRenderer";
 import DeepMindProgress from "../components/ui/DeepMindProgress"
@@ -6,7 +6,7 @@ import SearchStatus from "../components/ui/SearchStatus";
 import WeatherCard from "../components/ui/WeatherCard";
 import ImageGenCard from "../components/ui/ImageGenCard";
 import ReactMarkdown from 'react-markdown';
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { useState, useEffect, useRef } from "react"
 import axios from "axios"
 import { nanoid } from "nanoid"
@@ -36,6 +36,9 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     const scrollContainerRef = useRef(null)
     const shouldAutoScrollRef = useRef(true)
 
+    // Lightbox State
+    const [previewImage, setPreviewImage] = useState(null);
+
     // Load or reset chat based on session ID changes
     useEffect(() => {
         const loadSession = async () => {
@@ -53,8 +56,12 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                             generatedImage: msg.generatedImage, // Include generated image data
                             type: msg.type, // Include message type
                             model: msg.model,
-                            mode: msg.mode
+                            mode: msg.mode,
+                            attachment: msg.attachment // Include attachment data
                         }));
+
+                        console.log(`[ChatArea] Loaded ${formattedMessages.length} messages for session ${PanelInteractionVars.activeSessionId}`);
+                        console.log('[ChatArea] Sample message:', formattedMessages[0]);
 
                         setcontext(formattedMessages);
                         setIsChatStarted(true);
@@ -64,8 +71,6 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                             userId,
                             sessionId: PanelInteractionVars.activeSessionId
                         });
-
-                        console.log(`[ChatArea] Loaded ${formattedMessages.length} messages for session ${PanelInteractionVars.activeSessionId}`);
                     }
                 } catch (error) {
                     console.error('[ChatArea] Failed to load session:', error);
@@ -330,6 +335,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             setcontext(prev => [...prev, {
                 role: "assistant",
                 content: "",
+                streaming: true,
                 searchStatus: isWebSearchEnabled ? 'searching' : null,
                 searchLogs: [],
                 searchSources: [],
@@ -343,6 +349,20 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             eventSourceRef.current = new EventSource(`http://localhost:5000/stream/${streamId}`);
 
             eventSourceRef.current.onmessage = (event) => {
+                // Handle [DONE] signal
+                if (event.data === '[DONE]') {
+                    eventSourceRef.current.close();
+                    setIsStreaming(false);
+                    setcontext(prev => {
+                        const updated = [...prev];
+                        if (updated.length > 0) {
+                            updated[updated.length - 1].streaming = false;
+                        }
+                        return updated;
+                    });
+                    return;
+                }
+
                 let data;
                 try {
                     data = JSON.parse(event.data);
@@ -434,6 +454,40 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                 },
                                 type: 'image_generated'
                             };
+                        }
+                        return updated;
+                    });
+                }
+
+                if (data.type === 'attachment_uploaded') {
+                    console.log('[Stream] Attachment Uploaded:', data.url);
+                    setcontext(prev => {
+                        const updated = [...prev];
+                        // Find the last user message
+                        const lastUserMsgIndex = updated.map(m => m.role).lastIndexOf('user');
+
+                        if (lastUserMsgIndex !== -1) {
+                            const msg = updated[lastUserMsgIndex];
+                            // Update attachment content from Base64 to URL
+                            if (msg.attachment) {
+                                const updatedMsg = {
+                                    ...msg,
+                                    attachment: {
+                                        ...msg.attachment,
+                                        content: data.url
+                                    }
+                                };
+                                updated[lastUserMsgIndex] = updatedMsg;
+
+                                // FORCE SAVE IMMEDIATELY to ensure URL is persisted before any chat switch
+                                // (Using the latest updated context array logic)
+                                axios.post('http://localhost:5000/context/save', {
+                                    userId,
+                                    messages: updated,
+                                    projectId: PanelInteractionVars?.activeProject?._id
+                                }).then(() => console.log('[Stream] Context saved with persistent Image URL'))
+                                    .catch(e => console.error('Failed to save persistent image:', e));
+                            }
                         }
                         return updated;
                     });
@@ -618,47 +672,83 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                         return (
                             <div key={index} className="flex flex-col w-full mb-4">
                                 {/* Attachment Card */}
+                                {/* Attachment Card */}
                                 {node.attachment && (
                                     <div className="flex justify-end mb-2">
-                                        <div className="bg-secondary/50 backdrop-blur-sm border border-white/10 p-3 rounded-xl flex items-center gap-3 w-fit max-w-[80%]">
-                                            <div className={`p-2 rounded-lg ${node.attachment.type.startsWith('image/') ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>
-                                                {node.attachment.type.startsWith('image/') ? <ImageIcon size={20} /> : <FileText size={20} />}
-                                            </div>
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-medium text-text">{node.attachment.name}</span>
-                                                <span className="text-xs text-textLight uppercase">{node.attachment.type.split('/')[1] || 'FILE'}</span>
-                                            </div>
+                                        <div className="overflow-hidden rounded-xl bg-secondary/50 border border-white/10 w-fit max-w-[80%]">
+                                            {node.attachment.type.startsWith('image/') && node.attachment.content ? (
+                                                <div
+                                                    className="relative group cursor-pointer"
+                                                    onClick={() => setPreviewImage(node.attachment.content)}
+                                                >
+                                                    <img
+                                                        src={node.attachment.content}
+                                                        alt={node.attachment.name}
+                                                        className="max-w-xs max-h-64 object-cover rounded-t-xl"
+                                                    />
+                                                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <span className="text-xs text-white truncate block">{node.attachment.name}</span>
+                                                    </div>
+                                                </div>
+                                            ) : (
+
+                                                <a
+                                                    href="#"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        handleDownload(node.attachment.content, node.attachment.name);
+                                                    }}
+                                                    className="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/5 transition-colors"
+                                                >
+                                                    <div className={`p-2 rounded-lg ${node.attachment.type.startsWith('image/') ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>
+                                                        {node.attachment.type.startsWith('image/') ? <ImageIcon size={20} /> : <FileText size={20} />}
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-medium text-text">{node.attachment.name}</span>
+                                                        <span className="text-xs text-textLight uppercase">{node.attachment.type.split('/')[1] || 'FILE'}</span>
+                                                    </div>
+                                                </a>
+                                            )}
                                         </div>
                                     </div>
-                                )}
+                                )
+                                }
                                 {/* Weather Card - Full Width */}
-                                {node.weatherData && (
-                                    <div className="w-full">
-                                        <WeatherCard data={node.weatherData} />
-                                    </div>
-                                )}
+                                {
+                                    node.weatherData && (
+                                        <div className="w-full">
+                                            <WeatherCard data={node.weatherData} />
+                                        </div>
+                                    )
+                                }
 
                                 {/* Search Status - Full Width */}
-                                {node.searchStatus && (
-                                    <div className="w-full mb-2">
-                                        <SearchStatus
-                                            status={node.searchStatus}
-                                            logs={node.searchLogs || []}
-                                            sources={node.searchSources || []}
-                                            isAuto={node.isAutoSearch}
-                                        />
-                                    </div>
-                                )}
+                                {
+                                    node.searchStatus && (
+                                        <div className="w-full mb-2">
+                                            <SearchStatus
+                                                status={node.searchStatus}
+                                                logs={node.searchLogs || []}
+                                                sources={node.searchSources || []}
+                                                isAuto={node.isAutoSearch}
+                                            />
+                                        </div>
+                                    )
+                                }
 
                                 {/* Image Generation Card */}
-                                {node.generatedImage && (
-                                    <div className="w-full flex justify-start mb-4">
-                                        <ImageGenCard
-                                            imageUrl={node.generatedImage.url}
-                                            prompt={node.generatedImage.prompt}
-                                        />
-                                    </div>
-                                )}
+                                {
+                                    node.generatedImage && (
+                                        <div className="w-full flex justify-start mb-4">
+                                            <div onClick={() => setPreviewImage(node.generatedImage.url)} className="cursor-pointer">
+                                                <ImageGenCard
+                                                    imageUrl={node.generatedImage.url}
+                                                    prompt={node.generatedImage.prompt}
+                                                />
+                                            </div>
+                                        </div>
+                                    )
+                                }
 
                                 {/* Only show text bubble if it's NOT a system message with an image */}
                                 {(!node.generatedImage || node.role === 'user') && (
@@ -677,11 +767,29 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                                 sources={node.searchSources}
                                             />
                                         )}
+
+                                        {/* Response Actions (Like, Dislike, Copy) for Assistant ONLY */}
+                                        {node.role === 'assistant' && !node.streaming && (
+                                            <div className="flex items-center gap-2 mt-3 px-1">
+                                                <button className="p-1.5 text-textLight hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+                                                    <ThumbsUp size={14} />
+                                                </button>
+                                                <button className="p-1.5 text-textLight hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+                                                    <ThumbsDown size={14} />
+                                                </button>
+                                                <button
+                                                    className="p-1.5 text-textLight hover:text-white hover:bg-white/10 rounded-lg transition-colors ml-auto"
+                                                    onClick={() => navigator.clipboard.writeText(node.content)}
+                                                    title="Copy to clipboard"
+                                                >
+                                                    <Copy size={14} />
+                                                </button>
+                                            </div>
+                                        )}
                                     </motion.div>
                                 )}
                             </div>
-                        )
-                    })
+)
                 }
                 <div ref={messagesEndRef} />
             </motion.div>
@@ -694,22 +802,52 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 <AiInput
                     promptInput={promptInput}
                     setpromptInput={setpromptInput}
-                    setIsChatStarted={setIsChatStarted}
-                    isChatStarted={isChatStarted}
-                    isSendPrompt={isSendPrompt}
-                    setIsSendPrompt={setIsSendPrompt}
-                    selectedModel={selectedModel}
-                    setSelectedModel={setSelectedModel}
+                    handleSend={completeQuery}
                     isDeepMindEnabled={isDeepMindEnabled}
-                    setIsDeepMindEnabled={setIsDeepMindEnabled}
+                    toggleDeepMind={() => setIsDeepMindEnabled(!isDeepMindEnabled)}
                     isWebSearchEnabled={isWebSearchEnabled}
                     setIsWebSearchEnabled={setIsWebSearchEnabled}
+                    selectedModel={selectedModel}
+                    setSelectedModel={setSelectedModel}
+                    isChatStarted={isChatStarted}
+                    isStreaming={isStreaming}
+                    stopRecording={() => eventSourceRef.current?.close()}
                     attachment={attachment}
                     setAttachment={setAttachment}
                     activeProject={PanelInteractionVars?.activeProject}
                 />
             </motion.div>
-        </motion.div>
+
+            {/* Image Modal Lightbox */}
+            <AnimatePresence>
+                {previewImage && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setPreviewImage(null)}
+                        className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-8 cursor-pointer"
+                    >
+                        <motion.img
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            src={previewImage}
+                            alt="Preview"
+                            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                            onClick={(e) => e.stopPropagation()} // Prevent close on image click
+                        />
+                        <button
+                            onClick={() => setPreviewImage(null)}
+                            className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+                        >
+                            <X size={24} />
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+        </motion.div >
     )
 }
 

@@ -68,10 +68,16 @@ const messageSchema = new mongoose.Schema({
     hiddenContent: { type: String }, // For file context
     attachments: [{
         name: String,
-        type: String,
+        type: { type: String }, // Fix: Escape reserved 'type' keyword
         size: Number,
         content: String // Base64 or URL
     }],
+    // Singular attachment field (used by current frontend)
+    attachment: {
+        name: String,
+        type: { type: String }, // Fix: Escape reserved 'type' keyword
+        content: String // Base64 or URL
+    },
     searchResults: [{ title: String, link: String, snippet: String }],
     weatherData: { type: Object },
     timestamp: { type: Date, default: Date.now }

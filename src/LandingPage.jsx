@@ -10,46 +10,52 @@ function LandingPage() {
     return (
         <div className="min-h-screen bg-[#0A0A0A] text-white selection:bg-indigo-500/30 overflow-x-hidden font-sans">
 
-            {/* Navbar */}
-            <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-[#0A0A0A]/80 backdrop-blur-md">
-                <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            {/* Floating Navbar (Mobbin Style) */}
+            <div className="fixed top-6 left-0 right-0 z-50 flex justify-center px-6">
+                <nav className="w-full max-w-3xl bg-[#0A0A0A]/80 backdrop-blur-xl border border-white/10 rounded-full px-6 py-3 flex items-center justify-between shadow-2xl shadow-black/50">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
-                            <Sparkles size={18} className="text-white" fill="currentColor" />
+                        <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center border border-white/5">
+                            <Sparkles size={16} className="text-white" fill="currentColor" />
                         </div>
-                        <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
+                        <span className="text-sm font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">
                             QueueBot
                         </span>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <Link to={destination} className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">
-                            {token ? "Dashboard" : "Sign In"}
-                        </Link>
+                    <div className="flex items-center gap-6">
+                        {token ? (
+                            <Link to="/app" className="text-xs font-medium text-zinc-400 hover:text-white transition-colors">
+                                Dashboard
+                            </Link>
+                        ) : (
+                            <Link to="/signin" className="text-xs font-medium text-zinc-400 hover:text-white transition-colors">
+                                Sign In
+                            </Link>
+                        )}
                         <Link
                             to={destination}
-                            className="px-4 py-2 bg-white text-black text-sm font-semibold rounded-full hover:bg-indigo-50 transition-colors"
+                            className="px-4 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-zinc-200 transition-colors"
                         >
                             Get Started
                         </Link>
                     </div>
-                </div>
-            </nav>
+                </nav>
+            </div>
 
             {/* Hero Section */}
-            <section className="relative pt-32 pb-20 px-6">
-                {/* Background Glow */}
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-indigo-500/10 blur-[100px] rounded-full pointer-events-none" />
+            <section className="relative pt-40 pb-20 px-6">
+                {/* Background Glow - Neutral */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-white/5 blur-[120px] rounded-full pointer-events-none" />
 
                 <div className="max-w-4xl mx-auto text-center relative z-10">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.5 }}
-                        className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-indigo-400 text-xs font-medium mb-6"
+                        className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-400 text-xs font-medium mb-8"
                     >
                         <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
                         </span>
                         v2.0 Now Available with Vision & Voice
                     </motion.div>
@@ -58,10 +64,10 @@ function LandingPage() {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.5, delay: 0.1 }}
-                        className="text-5xl md:text-7xl font-bold tracking-tight mb-6"
+                        className="text-5xl md:text-7xl font-bold tracking-tight mb-8"
                     >
                         The Ultimate <br />
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-400">
+                        <span className="text-zinc-500">
                             AI Workspace
                         </span>
                     </motion.h1>
@@ -95,97 +101,76 @@ function LandingPage() {
                 </div>
             </section>
 
-            {/* Feature Grid (Mobbin Style) */}
-            <section className="py-20 px-6 max-w-7xl mx-auto">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Feature Grid (Compact Bento Style) */}
+            {/* Feature Grid (Wide 90% Bento Style) */}
+            <section className="py-20 mx-auto w-[90%] max-w-[1600px]">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[minmax(200px,auto)]">
 
-                    {/* Card 1: DeepMind */}
+                    {/* Card 1: DeepMind (Large 2x2) */}
                     <FeatureCard
-                        icon={<Brain size={24} className="text-indigo-400" />}
+                        icon={<Brain size={24} className="text-zinc-500" />}
                         title="DeepMind 2.0"
                         description="Multi-model consensus engine that debates via internal monologue to find the best answer."
-                        image="https://res.cloudinary.com/dgif63g0l/image/upload/v1734081600/deepmind-demo.png" // Placeholder or generates one
+                        className="md:col-span-2 md:row-span-2 min-h-[400px]"
                     />
 
-                    {/* Card 2: Vision Analysis */}
+                    {/* Card 2: Vision Analysis (Tall 1x2) */}
                     <FeatureCard
-                        icon={<Layers size={24} className="text-purple-400" />}
+                        icon={<Layers size={24} className="text-zinc-500" />}
                         title="Vision Analysis"
-                        description="Drop images directly into chat. Llama-4 Vision analyzes structures, code, and diagrams instantly."
-                        className="md:col-span-2"
+                        description="Llama-4 Vision analyzes structures, code, and diagrams instantly."
+                        className="md:col-span-1 md:row-span-2 min-h-[400px]"
                     />
 
-                    {/* Card 3: Voice Control */}
+                    {/* Card 3: Project Context (Wide 2x1) */}
                     <FeatureCard
-                        icon={<Zap size={24} className="text-yellow-400" />}
-                        title="Voice Command"
-                        description="Speak naturally. Auto-silence detection and Whisper Turbo transcription for hands-free coding."
-                        className="md:col-span-2"
-                    />
-
-                    {/* Card 4: Projects */}
-                    <FeatureCard
-                        icon={<Command size={24} className="text-green-400" />}
+                        icon={<Command size={24} className="text-zinc-500" />}
                         title="Project Context"
                         description="Organize chats into Projects. Persistent context awareness across sessions."
+                        className="md:col-span-2 min-h-[200px]"
+                    />
+
+                    {/* Card 4: Voice Control (Small 1x1) */}
+                    <FeatureCard
+                        icon={<Zap size={24} className="text-zinc-500" />}
+                        title="Voice Command"
+                        description="Speak naturally. Auto-silence detection and Whisper Turbo transcription for hands-free coding."
+                        className="md:col-span-1 min-h-[200px]"
                     />
 
                 </div>
             </section>
 
-            {/* How It Works */}
+            {/* Model Ecosystem */}
             <section className="py-20 px-6 bg-zinc-900/20 border-y border-white/5">
-                <div className="max-w-7xl mx-auto">
-                    <div className="text-center mb-16">
-                        <h2 className="text-3xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400 mb-4">
-                            Workflow Reimagined
-                        </h2>
-                        <p className="text-zinc-400 text-lg">From concept to code in three simple steps.</p>
+                <div className="max-w-6xl mx-auto">
+                    <div className="text-center mb-12">
+                        <h2 className="text-2xl md:text-3xl font-semibold text-white mb-2">Powered by Frontier Models</h2>
+                        <p className="text-zinc-500">Access the world's most capable intelligence engines in one unified interface.</p>
                     </div>
-
-                    <div className="grid md:grid-cols-3 gap-12">
-                        <div className="relative text-center">
-                            <div className="w-16 h-16 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                                <span className="text-2xl font-bold text-indigo-400">1</span>
+                    <div className="flex flex-wrap justify-center gap-4 md:gap-8 opacity-70">
+                        {['GPT-OSS 120B', 'QWEN 3 32B', 'LLAMA 3.3 70B', 'KIMI K2'].map((model) => (
+                            <div key={model} className="px-6 py-3 rounded-full bg-white/5 border border-white/5 text-zinc-300 font-mono text-sm">
+                                {model}
                             </div>
-                            <h3 className="text-xl font-semibold text-white mb-2">Connect</h3>
-                            <p className="text-zinc-500">Integrate your GitHub, Google Drive, and local files directly into the context window.</p>
-                        </div>
-                        <div className="relative text-center">
-                            <div className="w-16 h-16 bg-purple-500/10 border border-purple-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                                <span className="text-2xl font-bold text-purple-400">2</span>
-                            </div>
-                            <h3 className="text-xl font-semibold text-white mb-2">Orchestrate</h3>
-                            <p className="text-zinc-500">Let the DeepMind consensus engine debate and refine the logic before writing a single line of code.</p>
-                        </div>
-                        <div className="relative text-center">
-                            <div className="w-16 h-16 bg-green-500/10 border border-green-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                                <span className="text-2xl font-bold text-green-400">3</span>
-                            </div>
-                            <h3 className="text-xl font-semibold text-white mb-2">Execute</h3>
-                            <p className="text-zinc-500">Generate production-ready code, analyze images, and deploy seamlessly.</p>
-                        </div>
+                        ))}
                     </div>
                 </div>
             </section>
 
-            {/* Testimonial / Social Proof */}
+            {/* Privacy / Security Support */}
             <section className="py-20 px-6">
-                <div className="max-w-4xl mx-auto text-center">
-                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 mb-8">
-                        <div className="flex -space-x-2">
-                            {[1, 2, 3].map(i => (
-                                <div key={i} className="w-6 h-6 rounded-full bg-zinc-700 border border-[#0A0A0A]"></div>
-                            ))}
+                <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-8">
+                    {[
+                        { title: "Zero Retention", desc: "Your code is never stored or used for model training." },
+                        { title: "End-to-End Encrypted", desc: "Enterprise-grade encryption for all data in transit and at rest." },
+                        { title: "Secure Cloud Storage", desc: "Uploaded files and images are securely stored for persistent history." }
+                    ].map((feature, i) => (
+                        <div key={i} className="bg-zinc-900/30 border border-white/5 p-8 rounded-2xl text-left">
+                            <h3 className="text-white font-medium mb-2">{feature.title}</h3>
+                            <p className="text-zinc-500 text-sm leading-relaxed">{feature.desc}</p>
                         </div>
-                        <span className="text-sm text-zinc-400">Trusted by 10,000+ developers</span>
-                    </div>
-                    <blockquote className="text-2xl md:text-3xl font-medium text-white mb-6 leading-relaxed">
-                        "QueueBot isn't just a chatbot. It's like pair-programming with a senior engineer who has access to the entire internet and never gets tired."
-                    </blockquote>
-                    <cite className="text-zinc-500 not-italic block font-medium">
-                        — Sarah J., Senior Frontend Architect
-                    </cite>
+                    ))}
                 </div>
             </section>
 
@@ -211,7 +196,7 @@ function FeatureCard({ icon, title, description, className = "", image }) {
     return (
         <motion.div
             whileHover={{ y: -5 }}
-            className={`relative group overflow-hidden bg-zinc-900/50 border border-white/5 rounded-3xl p-8 hover:border-indigo-500/30 transition-colors ${className}`}
+            className={`relative group overflow-hidden bg-zinc-900/50 border border-white/5 rounded-3xl p-10 hover:border-indigo-500/30 transition-colors ${className}`}
         >
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
 
@@ -222,13 +207,18 @@ function FeatureCard({ icon, title, description, className = "", image }) {
                 <h3 className="text-xl font-semibold mb-2 text-white">{title}</h3>
                 <p className="text-zinc-400 leading-relaxed mb-8">{description}</p>
 
-                {/* Abstract Visual Placeholder */}
-                <div className="mt-auto w-full h-32 bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-xl border border-white/5 flex items-center justify-center opacity-50 group-hover:opacity-100 transition-opacity">
-                    <span className="text-zinc-600 text-xs font-mono uppercase tracking-widest">Preview</span>
-                </div>
+                {/* Feature Image or Placeholder */}
+                {image && (
+                    <div className="mt-4 flex-1 w-full min-h-[200px] overflow-hidden rounded-xl flex items-center justify-center p-2">
+                        <img
+                            src={image}
+                            alt={title}
+                            className="w-full h-full object-contain opacity-90 group-hover:scale-105 group-hover:opacity-100 transition-all duration-500"
+                        />
+                    </div>
+                )}
             </div>
         </motion.div>
     )
 }
-
 export default LandingPage;

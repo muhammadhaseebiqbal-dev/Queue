@@ -293,8 +293,14 @@ app.post('/context/save', async (req, res) => {
                         generatedImage: msg.generatedImage || undefined,
                         model: msg.model || 'unknown',
                         mode: msg.mode || 'standard',
+                        attachment: msg.attachment, // FIX: Save attachment data to DB
                         timestamp: new Date()
                     }));
+
+                // Debug: Check mapping
+                if (messagesToSave.some(m => m.attachment)) {
+                    console.log('[Message Save] Saving messages with attachments:', messagesToSave.filter(m => m.attachment).length);
+                }
 
                 await Message.deleteMany({ sessionId: chatContexts[userId].sessionId });
                 if (messagesToSave.length > 0) {
@@ -542,11 +548,20 @@ app.get('/stream/:id', async (req, res) => {
         if (payload.attachment) {
 
             // <<< CLOUDINARY UPLOAD FOR ATTACHMENT >>>
+            let originalBase64 = null;
             if (payload.attachment.content) {
+                originalBase64 = payload.attachment.content; // Store original for parsing
                 const secureUrl = await uploadToCloudinary(payload.attachment.content);
                 if (secureUrl) {
                     payload.attachment.content = secureUrl;
                     console.log('[Attachment] Replaced Base64 with Cloudinary URL');
+
+                    // Send URL back to client to update state/persistence
+                    res.write(`data: ${JSON.stringify({
+                        type: 'attachment_uploaded',
+                        url: secureUrl,
+                        name: payload.attachment.name
+                    })}\n\n`);
                 }
             }
 
@@ -568,17 +583,19 @@ app.get('/stream/:id', async (req, res) => {
             else {
                 console.log(`Attachment is Document (${payload.attachment.name}) - Parsing content...`);
 
-                // Decode base64 buffer for parser
-                const buffer = Buffer.from(payload.attachment.content.split(',')[1], 'base64');
-                const parsedText = await parseFileContent({
-                    buffer,
-                    mimetype: payload.attachment.type,
-                    originalname: payload.attachment.name
-                });
+                // Decode base64 buffer for parser (Use protected originalBase64)
+                if (originalBase64) {
+                    const buffer = Buffer.from(originalBase64.split(',')[1], 'base64');
+                    const parsedText = await parseFileContent({
+                        buffer,
+                        mimetype: payload.attachment.type,
+                        originalname: payload.attachment.name
+                    });
 
-                if (parsedText) {
-                    attachmentContext = `\n\n---\n[ATTACHED FILE: ${payload.attachment.name}]\n${parsedText.slice(0, 50000)}\n---\n`; // Cap at 50k chars to be safe
-                    console.log(`Parsed ${parsedText.length} chars from ${payload.attachment.name}`);
+                    if (parsedText) {
+                        attachmentContext = `\n\n---\n[ATTACHED FILE: ${payload.attachment.name}]\n${parsedText.slice(0, 50000)}\n---\n`; // Cap at 50k chars to be safe
+                        console.log(`Parsed ${parsedText.length} chars from ${payload.attachment.name}`);
+                    }
                 }
             }
         }
@@ -800,7 +817,7 @@ app.get('/stream/:id', async (req, res) => {
 
         for await (const chunk of chatCompletion) {
             const content = chunk.choices[0]?.delta?.content || '';
-            if (content) {
+            if (content && typeof content === 'string') {
                 res.write(`data: ${JSON.stringify({ content })}\n\n`);
             }
         }
@@ -812,9 +829,32 @@ app.get('/stream/:id', async (req, res) => {
         delete store[req.params.id];
     } catch (error) {
         console.error(error);
-        res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+        const errorMessage = error?.message || error?.toString() || 'Unknown streaming error';
+        res.write(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
         res.end();
         delete store[req.params.id];
+    }
+});
+
+// Get Messages for a Session
+app.get('/api/messages/:sessionId', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+
+        if (!isConnected) {
+            // Fallback to memory
+            const memSession = memorySessions.find(s => s._id === sessionId);
+            return res.json({ messages: memSession?.messages || [] });
+        }
+
+        const messages = await Message.find({ sessionId })
+            .sort({ timestamp: 1 })
+            .lean(); // Use lean() for better performance
+
+        res.json({ messages });
+    } catch (error) {
+        console.error('Get Messages API Error:', error);
+        res.status(500).json({ error: 'Failed to fetch messages' });
     }
 });
 
@@ -1002,19 +1042,19 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 app.post('/api/auth/google', async (req, res) => {
     try {
         const { accessToken } = req.body;
-        
+
         // Fetch User Info using Access Token
         const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
             headers: { Authorization: `Bearer ${accessToken}` }
         });
-        
+
         if (!response.ok) {
             throw new Error('Failed to fetch user info from Google');
         }
 
         const data = await response.json();
         const { sub: googleId, email, name, picture } = data;
-        
+
         // Sync User in DB
         let user = null;
         if (isConnected) {

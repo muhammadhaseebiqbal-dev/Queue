@@ -47,34 +47,32 @@ function SignIn() {
     };
 
     return (
-        <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center p-6 text-white font-sans relative overflow-hidden">
+        <div className="min-h-screen w-full flex bg-[#0A0A0A] font-sans overflow-hidden">
 
-            {/* Background Glow */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-indigo-500/10 blur-[100px] rounded-full pointer-events-none" />
-
-            <div className="w-full max-w-md relative z-10">
-                <Link to="/" className="inline-flex items-center text-zinc-500 hover:text-white mb-8 transition-colors">
-                    <ArrowLeft size={16} className="mr-2" /> Back to Home
+            {/* Left Side: Form */}
+            <div className="w-full md:w-1/2 flex flex-col p-8 md:p-16 justify-center relative z-10">
+                <Link to="/" className="absolute top-8 left-8 md:left-16 inline-flex items-center text-zinc-500 hover:text-white transition-colors text-sm">
+                    <ArrowLeft size={16} className="mr-2" /> Back
                 </Link>
 
                 <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-zinc-900/50 border border-white/5 backdrop-blur-xl p-8 rounded-3xl shadow-2xl"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="max-w-md w-full mx-auto"
                 >
-                    <div className="text-center mb-8">
-                        <div className="w-12 h-12 bg-indigo-500 rounded-xl flex items-center justify-center mx-auto mb-4">
-                            <Sparkles size={24} className="text-white" />
+                    <div className="mb-10">
+                        <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mb-6 shadow-lg shadow-white/10">
+                            <Sparkles size={24} className="text-black" fill="currentColor" />
                         </div>
-                        <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">Welcome Back</h2>
-                        <p className="text-zinc-500 text-sm mt-2">Sign in to continue to your workspace</p>
+                        <h2 className="text-3xl font-bold text-white mb-2">Welcome Back</h2>
+                        <p className="text-zinc-500">Enter your credentials to access the workspace.</p>
                     </div>
 
                     {/* Google Sign In */}
                     <button
                         onClick={() => googleLogin()}
                         disabled={loading}
-                        className="w-full bg-white text-black font-semibold h-12 rounded-xl flex items-center justify-center gap-3 hover:bg-zinc-100 transition-colors mb-6 disabled:opacity-70"
+                        className="w-full bg-white text-black font-semibold h-12 rounded-lg flex items-center justify-center gap-3 hover:bg-zinc-200 transition-colors mb-6 disabled:opacity-70 border border-transparent"
                     >
                         {loading ? <Loader2 className="animate-spin" /> :
                             <>
@@ -84,12 +82,12 @@ function SignIn() {
                         }
                     </button>
 
-                    <div className="relative mb-6">
+                    <div className="relative mb-8">
                         <div className="absolute inset-0 flex items-center">
                             <div className="w-full border-t border-white/10"></div>
                         </div>
-                        <div className="relative flex justify-center text-xs">
-                            <span className="px-2 bg-[#0A0A0A] text-zinc-500 bg-opacity-0 backdrop-blur-none bg-zinc-900">Or continue with email</span>
+                        <div className="relative flex justify-center text-xs uppercase tracking-widest">
+                            <span className="px-2 bg-[#0A0A0A] text-zinc-600">Or</span>
                         </div>
                     </div>
 
@@ -100,37 +98,72 @@ function SignIn() {
                     )}
 
                     <form onSubmit={handleEmailSignIn} className="space-y-4">
-                        <div className="relative">
-                            <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-                            <input
-                                type="email"
-                                placeholder="Email address"
-                                value={email}
-                                onChange={e => setEmail(e.target.value)}
-                                className="w-full bg-black/20 border border-white/10 rounded-xl px-10 py-3 text-sm focus:outline-none focus:border-indigo-500/50 transition-colors"
-                                required
-                            />
+                        <div className="space-y-1">
+                            <label className="text-xs font-medium text-zinc-400 ml-1">Email</label>
+                            <div className="relative">
+                                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={e => setEmail(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-10 py-3 text-sm focus:outline-none focus:border-white/30 focus:bg-white/10 transition-colors text-white"
+                                    placeholder="name@company.com"
+                                    required
+                                />
+                            </div>
                         </div>
-                        <div className="relative">
-                            <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-                            <input
-                                type="password"
-                                placeholder="Password"
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
-                                className="w-full bg-black/20 border border-white/10 rounded-xl px-10 py-3 text-sm focus:outline-none focus:border-indigo-500/50 transition-colors"
-                                required
-                            />
+                        <div className="space-y-1">
+                            <label className="text-xs font-medium text-zinc-400 ml-1">Password</label>
+                            <div className="relative">
+                                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={e => setPassword(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-10 py-3 text-sm focus:outline-none focus:border-white/30 focus:bg-white/10 transition-colors text-white"
+                                    placeholder="••••••••"
+                                    required
+                                />
+                            </div>
                         </div>
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full bg-indigo-600 text-white font-semibold h-12 rounded-xl hover:bg-indigo-500 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                            className="w-full bg-zinc-800 text-white font-medium h-12 rounded-lg hover:bg-zinc-700 transition-colors border border-white/5 mt-2"
                         >
-                            {loading ? <Loader2 className="animate-spin mx-auto" /> : "Sign In"}
+                            {loading ? <Loader2 className="animate-spin mx-auto" /> : "Sign In with Email"}
                         </button>
+
+                        <p className="text-center text-xs text-zinc-600 mt-6">
+                            By continuing, you agree to our Terms of Service and Privacy Policy.
+                        </p>
                     </form>
                 </motion.div>
+            </div>
+
+            {/* Right Side: Artistic Visual */}
+            <div className="hidden md:flex w-1/2 bg-zinc-900 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-transparent to-zinc-900 z-10" />
+
+                {/* Abstract Image */}
+                <img
+                    src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop"
+                    alt="Abstract Art"
+                    className="absolute inset-0 w-full h-full object-cover opacity-60"
+                />
+
+                {/* Content Overlay */}
+                <div className="absolute bottom-0 left-0 right-0 p-16 z-20">
+                    <div className="max-w-md">
+                        <div className="w-16 h-1 bg-white mb-8"></div>
+                        <h3 className="text-3xl font-light text-white mb-4 leading-tight">
+                            "The artifacts of intelligence are not just answers, but new questions."
+                        </h3>
+                        <p className="text-zinc-400 text-sm">
+                            Exploring the symbiosis of human intent and synthetic execution.
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
     );
