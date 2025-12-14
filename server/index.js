@@ -294,6 +294,7 @@ app.post('/context/save', async (req, res) => {
                         model: msg.model || 'unknown',
                         mode: msg.mode || 'standard',
                         attachment: msg.attachment, // FIX: Save attachment data to DB
+                        feedback: msg.feedback || null, // Persist feedback
                         timestamp: new Date()
                     }));
 
@@ -531,7 +532,7 @@ app.get('/stream/:id', async (req, res) => {
             : [
                 {
                     role: 'system',
-                    content: 'You are a helpful AI assistant. When explaining mathematical concepts, formulas, equations, or physics problems, ALWAYS use LaTeX notation. Use inline LaTeX with single dollar signs $...$ for inline formulas and double dollar signs $$...$$ for display equations. For example: "The quadratic formula is $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$" or for display mode use $$E=mc^2$$. Always format mathematical expressions properly in LaTeX.'
+                    content: 'You are Queue, a helpful AI assistant created by Haseeb Iqbal. When explaining mathematical concepts, formulas, equations, or physics problems, ALWAYS use LaTeX notation. Use inline LaTeX with single dollar signs $...$ for inline formulas and double dollar signs $$...$$ for display equations. For example: "The quadratic formula is $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$" or for display mode use $$E=mc^2$$. Always format mathematical expressions properly in LaTeX.'
                 },
                 ...cleanedMessages
             ];
@@ -1300,6 +1301,21 @@ Provide the final answer incorporating the best insights.`;
     }
 });
 
-app.listen(process.env.PORT || 5000, () => {
+// default route
+app.get('/', (req, res) => {
+    res.json({
+        message: 'Welcome to the QueueBot API',
+        status: true,
+        data: {
+            name: 'QueueBot',
+            version: '1.2.0',
+            description: 'Standard api for my queuebot project',
+            license: 'ISC',
+            author: 'Haseeb Iqbal',
+        }
+    });
+});
+
+app.listen(process.env.PORT || 5000, '192.168.100.215', () => {
     console.log(`Server running on http://localhost:${process.env.PORT}`);
 });

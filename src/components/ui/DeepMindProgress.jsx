@@ -22,7 +22,7 @@ function DeepMindProgress({ phase, phaseData }) {
     const isComplete = phase >= 4;
 
     return (
-        <div className="w-[85%] bg-secondary rounded-2xl p-5 mb-3 border border-border">
+        <div className="w-full md:w-[85%] bg-secondary rounded-2xl p-5 mb-3 border border-border">
             <div className="flex items-center gap-2 mb-5 pb-4 border-b border-border">
                 <Brain size={18} className="text-text" />
                 <div className="flex-1">

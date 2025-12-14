@@ -5,7 +5,7 @@ import Drawer from "./Sections/Panel";
 import { nanoid } from "nanoid";
 
 function Workspace() {
-    const [isPanelExpanded, setIsPanelExpanded] = useState(true)
+    const [isPanelExpanded, setIsPanelExpanded] = useState(() => window.innerWidth > 768)
     const [activeSessionId, setActiveSessionId] = useState(null)
     const [userId] = useState(() => {
         // Try to get from localStorage first for persistence across reloads

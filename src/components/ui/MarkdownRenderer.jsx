@@ -14,13 +14,20 @@ function MarkdownRenderer({ content, streaming = false, sources = [] }) {
     // Regex matches [1], [2], etc.
     // 1. Pre-process content to linkify citations like [1], [1†source], 【1†source】
     // Regex matches [1], [1†source], etc.
-    const processedContent = content.replace(/(?:\[|【)(\d+)(?:†.*?)?(?:\]|】)/g, (match, id) => {
-        const sourceIndex = parseInt(id) - 1;
-        if (sources && sources[sourceIndex]) {
-            return `[[${id}]](${sources[sourceIndex].link})`;
-        }
-        return match;
-    });
+    const processedContent = content
+        // Linkify citations
+        .replace(/(?:\[|【)(\d+)(?:†.*?)?(?:\]|】)/g, (match, id) => {
+            const sourceIndex = parseInt(id) - 1;
+            if (sources && sources[sourceIndex]) {
+                return `[[${id}]](${sources[sourceIndex].link})`;
+            }
+            return match;
+        })
+        // Normalizing LaTeX delimiters for remark-math
+        // Replace \[ ... \] with $$ ... $$
+        .replace(/\\\[([\s\S]*?)\\\]/g, '$$$1$$')
+        // Replace \( ... \) with $ ... $
+        .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
 
     // Extract thinking blocks - handle both complete and incomplete tags during streaming
     const thinkingRegex = /<think>([\s\S]*?)(<\/think>|$)/g
@@ -177,9 +184,13 @@ function MarkdownRenderer({ content, streaming = false, sources = [] }) {
             )
         })}
             {streaming && (
-                <span className="inline-block ml-1 animate-pulse font-bold text-text">_</span>
+                <span className="inline-block ml-1 animate-pulse align-middle text-text">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2L22 9L19 21H5L2 9L12 2Z" />
+                    </svg>
+                </span>
             )}
-        </div >
+        </div>
     )
 }
 

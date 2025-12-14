@@ -1,4 +1,4 @@
-import { Copy, Sparkles, Image as ImageIcon, FileText, PanelRightOpen, X, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Copy, Sparkles, Image as ImageIcon, FileText, PanelRightOpen, X, ThumbsUp, ThumbsDown, Check, Bot, Rocket, Mountain, Moon, ChevronDown } from "lucide-react";
 import AiInput from "../components/ui/AiInput"
 import MarkdownRenderer from "../components/ui/MarkdownRenderer";
 import DeepMindProgress from "../components/ui/DeepMindProgress"
@@ -10,12 +10,13 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useState, useEffect, useRef } from "react"
 import axios from "axios"
 import { nanoid } from "nanoid"
+import { API_URL } from "../config"
 
 function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars }) {
 
     const [isChatStarted, setIsChatStarted] = useState(false)
     const [promptInput, setpromptInput] = useState('')
-    const [isSendPrompt, setIsSendPrompt] = useState(true)
+    const [isSendPrompt, setIsSendPrompt] = useState(false)
     const [context, setcontext] = useState([])
     const [isStreaming, setIsStreaming] = useState(false)
     const [selectedModel, setSelectedModel] = useState('gpt-oss-120b')
@@ -24,9 +25,47 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     const [attachment, setAttachment] = useState(null) // New Attachment State
     const [deepMindPhase, setDeepMindPhase] = useState(0)
     const [deepMindData, setDeepMindData] = useState({})
+    const [isMobileModelDropdownOpen, setIsMobileModelDropdownOpen] = useState(false)
+
+    const models = [
+        { id: 'gpt-oss-120b', name: 'GPT-OSS 120B', Icon: Bot },
+        { id: 'qwen-3-32b', name: 'QWEN 3 32B', Icon: Rocket },
+        { id: 'llama-3.3-70b', name: 'LLAMA 3.3 70B', Icon: Mountain },
+        { id: 'kimi-k2', name: 'KIMI K2', Icon: Moon }
+    ]
 
     // const [userId] = useState(() => nanoid()) // Removed: using shared userId from App
     const userId = PanelInteractionVars.userId;
+
+    const handleDownload = async (url, filename) => {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Network response was not ok');
+            const blob = await response.blob();
+
+            // Infer extension from blob type if missing in filename
+            let downloadName = filename || 'download';
+            if (!downloadName.includes('.')) {
+                const mimeType = blob.type;
+                const extension = mimeType.split('/')[1];
+                if (extension) {
+                    downloadName = `${downloadName}.${extension}`;
+                }
+            }
+
+            const blobUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = downloadName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+        } catch (error) {
+            console.error("Download failed, falling back to new tab:", error);
+            window.open(url, '_blank');
+        }
+    };
 
     const previousModel = useRef('gpt-oss-120b')
     const streamingMessageRef = useRef("")
@@ -39,13 +78,37 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     // Lightbox State
     const [previewImage, setPreviewImage] = useState(null);
 
+    // Message Actions State
+    const [copiedIndex, setCopiedIndex] = useState(null);
+
+    const handleCopy = (content, index) => {
+        navigator.clipboard.writeText(content);
+        setCopiedIndex(index);
+        setTimeout(() => setCopiedIndex(null), 2000);
+    };
+
+    const handleFeedback = (index, type) => {
+        setcontext(prev => {
+            const updated = [...prev];
+            const msg = updated[index];
+
+            // Toggle logic
+            if (msg.feedback === type) {
+                msg.feedback = null;
+            } else {
+                msg.feedback = type;
+            }
+            return updated;
+        });
+    };
+
     // Load or reset chat based on session ID changes
     useEffect(() => {
         const loadSession = async () => {
             if (PanelInteractionVars?.activeSessionId) {
                 // Load existing session
                 try {
-                    const response = await axios.get(`http://localhost:5000/api/messages/${PanelInteractionVars.activeSessionId}`);
+                    const response = await axios.get(`${API_URL}/api/messages/${PanelInteractionVars.activeSessionId}`);
                     const loadedMessages = response.data.messages;
 
                     if (loadedMessages && loadedMessages.length > 0) {
@@ -67,7 +130,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                         setIsChatStarted(true);
 
                         // CRITICAL: Tell backend which session is active
-                        await axios.post('http://localhost:5000/api/session/activate', {
+                        await axios.post(`${API_URL}/api/session/activate`, {
                             userId,
                             sessionId: PanelInteractionVars.activeSessionId
                         });
@@ -84,7 +147,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 setDeepMindData({});
 
                 // Reset backend state
-                axios.post('http://localhost:5000/api/session/reset', { userId })
+                axios.post(`${API_URL}/api/session/reset`, { userId })
                     .catch(err => console.error("Failed to reset session:", err));
             }
         };
@@ -102,6 +165,20 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             setSelectedModel('gpt-oss-120b');
         }
     }, [PanelInteractionVars?.activeProject]);
+
+
+    const mobileDropdownRef = useRef(null)
+
+    // Close mobile dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (mobileDropdownRef.current && !mobileDropdownRef.current.contains(event.target)) {
+                setIsMobileModelDropdownOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
 
     // Handle scroll events to detect if user has scrolled up
     const handleScroll = () => {
@@ -140,7 +217,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     useEffect(() => {
         if (context.length > 0) {
             const saveTimeout = setTimeout(() => {
-                axios.post('http://localhost:5000/context/save', {
+                axios.post(`${API_URL}/context/save`, {
                     userId,
                     messages: context,
                     projectId: PanelInteractionVars?.activeProject?._id // Include project ID if active
@@ -150,6 +227,9 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                         if (response.data?.isNewSession && PanelInteractionVars.triggerSidebarRefresh) {
                             console.log('[ChatArea] New session detected, refreshing sidebar');
                             PanelInteractionVars.triggerSidebarRefresh();
+                            if (PanelInteractionVars.setActiveSessionId && response.data.sessionId) {
+                                PanelInteractionVars.setActiveSessionId(response.data.sessionId);
+                            }
                         }
                     })
                     .catch(error => console.error('Error saving context:', error));
@@ -169,7 +249,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             setpromptInput("");
 
             // Prepare DeepMind session
-            const prepareRes = await axios.post("http://localhost:5000/deepmind/prepare", {
+            const prepareRes = await axios.post(`${API_URL}/deepmind/prepare`, {
                 userId,
                 message: userPrompt
             });
@@ -195,7 +275,8 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             streamingMessageRef.current = "";
 
             // Open EventSource
-            eventSourceRef.current = new EventSource(`http://localhost:5000/deepmind/stream/${sessionId}`);
+            eventSourceRef.current = new EventSource(`${API_URL}/deepmind/stream/${sessionId}`);
+
 
             eventSourceRef.current.onmessage = (event) => {
                 const data = JSON.parse(event.data);
@@ -319,7 +400,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             setAttachment(null); // Reset attachment state immediately
 
             // Step 1: Prepare stream with userId for context
-            const response = await axios.post("http://localhost:5000/prepare-stream", {
+            const response = await axios.post(`${API_URL}/prepare-stream`, {
                 message: messageToSend,
                 userId: userId,
                 model: selectedModel,
@@ -346,7 +427,8 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             streamingMessageRef.current = "";
 
             // Step 2: Open SSE connection
-            eventSourceRef.current = new EventSource(`http://localhost:5000/stream/${streamId}`);
+            eventSourceRef.current = new EventSource(`${API_URL}/stream/${streamId}`);
+
 
             eventSourceRef.current.onmessage = (event) => {
                 // Handle [DONE] signal
@@ -378,8 +460,14 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     // Mark search as done if it was active
                     setcontext(prev => {
                         const updated = [...prev];
-                        if (updated.length > 0 && updated[updated.length - 1].searchStatus === 'searching') {
-                            updated[updated.length - 1].searchStatus = 'done';
+                        if (updated.length > 0) {
+                            // Fix: Ensure we mark the specific message as not streaming
+                            updated[updated.length - 1].streaming = false;
+
+                            // Also mark search as done if needed
+                            if (updated[updated.length - 1].searchStatus === 'searching') {
+                                updated[updated.length - 1].searchStatus = 'done';
+                            }
                         }
                         return updated;
                     });
@@ -481,7 +569,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
 
                                 // FORCE SAVE IMMEDIATELY to ensure URL is persisted before any chat switch
                                 // (Using the latest updated context array logic)
-                                axios.post('http://localhost:5000/context/save', {
+                                axios.post(`${API_URL}/context/save`, {
                                     userId,
                                     messages: updated,
                                     projectId: PanelInteractionVars?.activeProject?._id
@@ -557,6 +645,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             completeQuery();
             setIsSendPrompt(false);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isSendPrompt]);
 
     // useEffect(() => {
@@ -593,22 +682,20 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     }
 
     return (
+
         <motion.div
-            animate={{ width: isPanelExpanded ? '80%' : '100%' }}
-            transition={{
-                type: "spring",
-                stiffness: 260,
-                damping: 35,
-                mass: 0.6
-            }}
-            className="bg-primary relative h-screen flex flex-col justify-center items-center flex-1 w-full"
+            className={`bg-primary relative h-screen flex flex-col items-center flex-1 w-full overflow-hidden ${isChatStarted ? 'justify-end' : 'justify-center'}`}
         >
             {/* Panel Toggle Button */}
+            {/* Panel Toggle Button - Hidden when panel is open on mobile to prevent double toggles/visual clutter if using panel's own controls, but explicit here for consistency */}
             <motion.button
                 onClick={togglePanel}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className="text-text bg-tertiary hover:bg-secondary cursor-pointer p-3 rounded-2xl border-2 border-border flex justify-center items-center absolute top-3 left-3"
+                className={`text-text cursor-pointer absolute top-3 left-3 z-[60] flex justify-center items-center 
+                md:bg-tertiary md:hover:bg-secondary md:rounded-2xl md:border-2 md:border-border md:p-3 md:h-auto md:w-auto
+                bg-tertiary/80 backdrop-blur-md rounded-full border border-border/50 h-10 w-10 p-0 shadow-lg
+                ${isPanelExpanded && window.innerWidth < 768 ? 'hidden' : 'flex'}`}
             >
                 <motion.div
                     animate={{ rotate: isPanelExpanded ? 0 : 180 }}
@@ -618,9 +705,52 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                         damping: 25
                     }}
                 >
-                    <PanelRightOpen />
+                    <PanelRightOpen size={18} />
                 </motion.div>
             </motion.button>
+
+            {/* Mobile Model Switcher */}
+            {!PanelInteractionVars?.activeProject && (
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 md:hidden z-50 flex flex-col items-center" ref={mobileDropdownRef}>
+                    <button
+                        onClick={() => setIsMobileModelDropdownOpen(!isMobileModelDropdownOpen)}
+                        className="bg-tertiary/80 backdrop-blur-md h-10 rounded-full border border-border/50 px-4 flex items-center gap-2 text-text text-sm shadow-lg"
+                    >
+                        {(() => {
+                            const ModelIcon = models.find(m => m.id === selectedModel)?.Icon || Bot;
+                            return <ModelIcon size={14} className="shrink-0 text-textLight" />;
+                        })()}
+                        <span className="font-medium text-xs">{models.find(m => m.id === selectedModel)?.name}</span>
+                        <ChevronDown size={12} className={`text-textLight transition-transform duration-200 ${isMobileModelDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    <AnimatePresence>
+                        {isMobileModelDropdownOpen && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                className="absolute top-full mt-2 w-[180px] bg-secondary/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden py-1"
+                            >
+                                {models.map((model) => (
+                                    <button
+                                        key={model.id}
+                                        onClick={() => {
+                                            setSelectedModel(model.id);
+                                            setIsMobileModelDropdownOpen(false);
+                                        }}
+                                        className={`w-full px-4 py-3 text-left text-xs flex items-center gap-3 active:bg-white/10 transition-colors ${selectedModel === model.id ? 'text-blue-400 bg-blue-500/10' : 'text-text'
+                                            }`}
+                                    >
+                                        <model.Icon size={14} />
+                                        {model.name}
+                                    </button>
+                                ))}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            )}
 
             {/* Message Bubble Area */}
             <motion.div
@@ -631,7 +761,8 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent)'
                 }}
                 animate={{
-                    height: isChatStarted ? '80%' : '0%',
+                    flexGrow: isChatStarted ? 1 : 0,
+                    height: isChatStarted ? 'auto' : 0,
                     opacity: isChatStarted ? 1 : 0
                 }}
                 transition={{
@@ -639,7 +770,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     stiffness: 260,
                     damping: 35
                 }}
-                className="w-[70%] py-4 overflow-y-auto scrollbar-hide"
+                className="w-full md:w-[70%] px-4 md:px-0 pt-20 pb-4 md:py-4 overflow-y-auto scrollbar-hide"
             >
                 {
                     context.map((node, index) => {
@@ -711,8 +842,8 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                             )}
                                         </div>
                                     </div>
-                                )
-                                }
+                                )}
+
                                 {/* Weather Card - Full Width */}
                                 {
                                     node.weatherData && (
@@ -771,25 +902,41 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                         {/* Response Actions (Like, Dislike, Copy) for Assistant ONLY */}
                                         {node.role === 'assistant' && !node.streaming && (
                                             <div className="flex items-center gap-2 mt-3 px-1">
-                                                <button className="p-1.5 text-textLight hover:text-white hover:bg-white/10 rounded-lg transition-colors">
-                                                    <ThumbsUp size={14} />
-                                                </button>
-                                                <button className="p-1.5 text-textLight hover:text-white hover:bg-white/10 rounded-lg transition-colors">
-                                                    <ThumbsDown size={14} />
-                                                </button>
-                                                <button
-                                                    className="p-1.5 text-textLight hover:text-white hover:bg-white/10 rounded-lg transition-colors ml-auto"
-                                                    onClick={() => navigator.clipboard.writeText(node.content)}
-                                                    title="Copy to clipboard"
+                                                <motion.button
+                                                    whileTap={{ scale: 0.8 }}
+                                                    transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                                                    onClick={() => handleFeedback(index, 'like')}
+                                                    className={`p-1.5 rounded-lg transition-colors ${node.feedback === 'like' ? 'text-green-400 bg-white/10' : 'text-textLight hover:text-white hover:bg-white/10'}`}
+                                                    title="Like"
                                                 >
-                                                    <Copy size={14} />
-                                                </button>
+                                                    <ThumbsUp size={14} fill={node.feedback === 'like' ? "currentColor" : "none"} />
+                                                </motion.button>
+                                                <motion.button
+                                                    whileTap={{ scale: 0.8 }}
+                                                    transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                                                    onClick={() => handleFeedback(index, 'dislike')}
+                                                    className={`p-1.5 rounded-lg transition-colors ${node.feedback === 'dislike' ? 'text-red-400 bg-white/10' : 'text-textLight hover:text-white hover:bg-white/10'}`}
+                                                    title="Dislike"
+                                                >
+                                                    <ThumbsDown size={14} fill={node.feedback === 'dislike' ? "currentColor" : "none"} />
+                                                </motion.button>
+                                                <div className="ml-auto flex items-center">
+                                                    {copiedIndex === index && <span className="text-xs text-green-400 mr-2 animate-fade-in">Copied!</span>}
+                                                    <button
+                                                        className="p-1.5 text-textLight hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                                                        onClick={() => handleCopy(node.content, index)}
+                                                        title="Copy to clipboard"
+                                                    >
+                                                        {copiedIndex === index ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                                                    </button>
+                                                </div>
                                             </div>
                                         )}
                                     </motion.div>
                                 )}
                             </div>
-)
+                        )
+                    })
                 }
                 <div ref={messagesEndRef} />
             </motion.div>
@@ -797,7 +944,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             {/* Input Area */}
             <motion.div
                 layout
-                className="w-full flex justify-center items-center"
+                className="w-full flex justify-center items-center pb-6 pt-2 shrink-0 z-10"
             >
                 <AiInput
                     promptInput={promptInput}

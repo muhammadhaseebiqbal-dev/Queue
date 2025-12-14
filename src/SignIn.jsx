@@ -5,6 +5,7 @@ import { useAuth } from './context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { Sparkles, ArrowLeft, Mail, Lock, Loader2 } from 'lucide-react';
 import axios from 'axios';
+import { API_URL } from './config';
 
 function SignIn() {
     const [email, setEmail] = useState('');
@@ -19,7 +20,7 @@ function SignIn() {
         setLoading(true);
         setError('');
         try {
-            const res = await axios.post('http://localhost:5000/api/auth/google', {
+            const res = await axios.post(`${API_URL}/api/auth/google`, {
                 accessToken: tokenResponse.access_token
             });
 
@@ -42,6 +43,22 @@ function SignIn() {
 
     const handleEmailSignIn = async (e) => {
         e.preventDefault();
+
+        // Development Hardcoded Credentials
+        if (email === 'admin@admin.com' && password === 'admin') {
+            const devUser = {
+                userId: 'dev-admin-id',
+                email: 'admin@admin.com',
+                displayName: 'Admin User',
+                photoURL: null
+            };
+            const devToken = 'dev-token-placeholder';
+
+            login(devUser, devToken);
+            navigate('/app');
+            return;
+        }
+
         // For now, email is not implemented securely without Firebase or custom implementation
         alert("Please use Google Sign In for now (Native implementation in progress)");
     };

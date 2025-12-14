@@ -78,6 +78,7 @@ const messageSchema = new mongoose.Schema({
         type: { type: String }, // Fix: Escape reserved 'type' keyword
         content: String // Base64 or URL
     },
+    feedback: { type: String, enum: ['like', 'dislike', null], default: null },
     searchResults: [{ title: String, link: String, snippet: String }],
     weatherData: { type: Object },
     timestamp: { type: Date, default: Date.now }

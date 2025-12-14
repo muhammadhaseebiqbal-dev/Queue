@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import axios from "axios"
 
+import { API_URL } from "../../config"
+
 function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, toggleDeepMind, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment, activeProject, handleSend }) {
 
     const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
@@ -116,7 +118,7 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                 }
 
                 try {
-                    const response = await axios.post('http://localhost:5000/transcribe', formData, {
+                    const response = await axios.post(`${API_URL}/transcribe`, formData, {
                         headers: { 'Content-Type': 'multipart/form-data' }
                     });
                     setpromptInput(response.data.text);
@@ -230,7 +232,7 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
     };
 
     return (
-        <div className="bg-secondary border-2 border-border w-[70%] h-32 rounded-2xl p-1.5 flex flex-col justify-between relative">
+        <div className="bg-secondary border-2 border-border w-[95%] md:w-[70%] min-h-[110px] rounded-2xl p-1.5 flex flex-col justify-between relative">
 
             {/* Hidden File Input */}
             <input
@@ -409,7 +411,7 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                 <div className="flex gap-2 relative">
                     {/* Model Selector - Hidden when in a project */}
                     {!activeProject && (
-                        <div className="relative" ref={dropdownRef}>
+                        <div className="relative hidden md:block" ref={dropdownRef}>
                             <button
                                 onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
                                 className="bg-tertiary h-11 rounded-2xl border-2 border-borderLight px-3 flex items-center gap-2 text-text text-sm cursor-pointer hover:bg-secondary transition-colors w-[140px] justify-between"
