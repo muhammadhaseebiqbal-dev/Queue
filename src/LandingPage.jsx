@@ -42,18 +42,22 @@ function LandingPage() {
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-white/5 blur-[120px] rounded-full pointer-events-none" />
 
                 <div className="max-w-4xl mx-auto text-center relative z-10">
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.5 }}
-                        className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-400 text-xs font-medium mb-8"
-                    >
-                        <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-                        </span>
-                        v2.0 Now Available with Vision & Voice
-                    </motion.div>
+                    <Link to="/changelog">
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5 }}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-400 text-xs font-medium mb-8 cursor-pointer hover:bg-white/10 transition-colors"
+                        >
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                            </span>
+                            v2.5.0 Now Available with Cross-Platform Auth
+                        </motion.div>
+                    </Link>
 
                     <motion.h1
                         initial={{ opacity: 0, y: 20 }}
@@ -89,50 +93,165 @@ function LandingPage() {
                             Launch App
                             <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
                         </Link>
-                        <button className="px-8 py-4 bg-white/5 text-white font-semibold rounded-2xl hover:bg-white/10 border border-white/10 transition-all w-full sm:w-auto">
+                        <Link to="/changelog" className="px-8 py-4 bg-white/5 text-white font-semibold rounded-2xl hover:bg-white/10 border border-white/10 transition-all w-full sm:w-auto text-center">
                             View Changelog
-                        </button>
+                        </Link>
                     </motion.div>
                 </div>
             </section>
 
-            {/* Feature Grid (Compact Bento Style) */}
-            {/* Feature Grid (Wide 90% Bento Style) */}
-            <section className="py-20 mx-auto w-[90%] max-w-[1600px]">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[minmax(200px,auto)]">
+            {/* SECTION 2: Multi-Model Intelligence */}
+            <section id="features" className="py-24 px-6 bg-zinc-900/30 border-y border-white/5">
+                <div className="max-w-6xl mx-auto">
+                    <div className="text-center mb-16">
+                        <h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">Engineered for Intelligence</h2>
+                        <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
+                            Switch between the world's most capable open-source models instantly.
+                        </p>
+                    </div>
 
-                    {/* Card 1: DeepMind (Large 2x2) */}
-                    <FeatureCard
-                        icon={<Brain size={24} className="text-zinc-500" />}
-                        title="DeepMind 2.0"
-                        description="Multi-model consensus engine that debates via internal monologue to find the best answer."
-                        className="md:col-span-2 md:row-span-2 min-h-[400px]"
-                    />
+                    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {[
+                            { name: "GPT-OSS 120B", role: "General Purpose", desc: "Balanced performance for everyday tasks and coding." },
+                            { name: "QWEN 3 32B", role: "Reasoning", desc: "Exceptional logic and math capabilities." },
+                            { name: "LLAMA 3.3 70B", role: "Creative", desc: "Nuanced writing and creative generation." },
+                            { name: "KIMI K2", role: "Speed", desc: "Ultra-fast responses for quick queries." }
+                        ].map((model, i) => (
+                            <div key={i} className="bg-zinc-900 border border-white/10 rounded-2xl p-6 hover:bg-white/5 transition-colors">
+                                <div className="text-xs font-mono text-indigo-400 mb-2 uppercase tracking-wider">{model.role}</div>
+                                <h3 className="text-lg font-bold text-white mb-2">{model.name}</h3>
+                                <p className="text-sm text-zinc-500">{model.desc}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
 
-                    {/* Card 2: Vision Analysis (Tall 1x2) */}
-                    <FeatureCard
-                        icon={<Layers size={24} className="text-zinc-500" />}
-                        title="Vision Analysis"
-                        description="Llama-4 Vision analyzes structures, code, and diagrams instantly."
-                        className="md:col-span-1 md:row-span-2 min-h-[400px]"
-                    />
+            {/* SECTION 3: Persistent Workspace */}
+            <section className="py-24 px-6 relative">
+                <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-16 items-center">
+                    <div>
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-medium mb-6">
+                            Workspace
+                        </div>
+                        <h2 className="text-3xl md:text-5xl font-bold mb-6 text-white leading-tight">
+                            Memory that <br />
+                            <span className="text-zinc-500">Persists.</span>
+                        </h2>
+                        <div className="space-y-8 mt-8">
+                            {[
+                                { title: "Project Organization", desc: "Group related chats into dedicated Projects to keep your workspace clean." },
+                                { title: "Context Awareness", desc: "AI remembers previous messages in the session, even after you refresh or switch devices." },
+                                { title: "Cross-Platform Sync", desc: "Start on your laptop, continue on your phone. Your history travels with you." }
+                            ].map((item, i) => (
+                                <div key={i} className="flex gap-4">
+                                    <div className="w-px h-full bg-white/10 relative">
+                                        <div className="absolute top-2 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-zinc-800 border border-white/20" />
+                                    </div>
+                                    <div className="pb-8">
+                                        <h3 className="text-lg font-semibold text-white mb-1">{item.title}</h3>
+                                        <p className="text-zinc-400 text-sm leading-relaxed">{item.desc}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    {/* Visual representation of workspace */}
+                    <div className="bg-zinc-900 border border-white/10 rounded-3xl p-8 aspect-square flex flex-col items-center justify-center relative overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent opacity-50" />
+                        <Layers size={64} className="text-white/20 mb-6" />
+                        <div className="text-center relative z-10">
+                            <div className="bg-zinc-800 rounded-lg p-3 mb-3 border border-white/5 w-48 mx-auto flex items-center gap-3">
+                                <div className="w-3 h-3 rounded-full bg-green-500" />
+                                <span className="text-xs text-zinc-300">Project Alpha</span>
+                            </div>
+                            <div className="bg-zinc-800 rounded-lg p-3 mb-3 border border-white/5 w-48 mx-auto flex items-center gap-3 opacity-60">
+                                <div className="w-3 h-3 rounded-full bg-blue-500" />
+                                <span className="text-xs text-zinc-300">Website Redesign</span>
+                            </div>
+                            <div className="bg-zinc-800 rounded-lg p-3 border border-white/5 w-48 mx-auto flex items-center gap-3 opacity-40">
+                                <div className="w-3 h-3 rounded-full bg-orange-500" />
+                                <span className="text-xs text-zinc-300">Marketing Assets</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
 
-                    {/* Card 3: Project Context (Wide 2x1) */}
-                    <FeatureCard
-                        icon={<Command size={24} className="text-zinc-500" />}
-                        title="Project Context"
-                        description="Organize chats into Projects. Persistent context awareness across sessions."
-                        className="md:col-span-2 min-h-[200px]"
-                    />
+            {/* SECTION 4: Vision & Voice */}
+            <section className="py-24 px-6 bg-white/[0.02]">
+                <div className="max-w-6xl mx-auto">
+                    <div className="text-center mb-16">
+                        <h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">See. Speak. Create.</h2>
+                        <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
+                            Multimodal capabilities that expand how you interact with AI.
+                        </p>
+                    </div>
 
-                    {/* Card 4: Voice Control (Small 1x1) */}
-                    <FeatureCard
-                        icon={<Zap size={24} className="text-zinc-500" />}
-                        title="Voice Command"
-                        description="Speak naturally. Auto-silence detection and Whisper Turbo transcription for hands-free coding."
-                        className="md:col-span-1 min-h-[200px]"
-                    />
+                    <div className="grid md:grid-cols-2 gap-6">
+                        {/* Vision Card */}
+                        <div className="bg-zinc-900 border border-white/10 rounded-3xl p-10 flex flex-col relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <Sparkles size={120} />
+                            </div>
+                            <div className="relative z-10">
+                                <div className="w-12 h-12 bg-indigo-500/20 rounded-xl flex items-center justify-center mb-6 text-indigo-400">
+                                    <Sparkles size={24} />
+                                </div>
+                                <h3 className="text-2xl font-bold text-white mb-3">Vision Analysis</h3>
+                                <p className="text-zinc-400 mb-6">Upload images to get instant analysis, code generation from UI screenshots, or detailed descriptions.</p>
+                                <ul className="space-y-2 text-sm text-zinc-500">
+                                    <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" /> PNG, JPG support</li>
+                                    <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" /> Cloudinary storage</li>
+                                </ul>
+                            </div>
+                        </div>
 
+                        {/* Voice Card */}
+                        <div className="bg-zinc-900 border border-white/10 rounded-3xl p-10 flex flex-col relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <Zap size={120} />
+                            </div>
+                            <div className="relative z-10">
+                                <div className="w-12 h-12 bg-orange-500/20 rounded-xl flex items-center justify-center mb-6 text-orange-400">
+                                    <Zap size={24} />
+                                </div>
+                                <h3 className="text-2xl font-bold text-white mb-3">Voice Interaction</h3>
+                                <p className="text-zinc-400 mb-6">Speak naturally to QueueBot. Advanced speech-to-text captures your intent without typing.</p>
+                                <ul className="space-y-2 text-sm text-zinc-500">
+                                    <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-orange-500 rounded-full" /> Whisper Turbo integration</li>
+                                    <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-orange-500 rounded-full" /> Hands-free coding</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* SECTION 5: Smart Features */}
+            <section className="py-24 px-6 border-b border-white/5">
+                <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-8 text-center">
+                    <div className="p-6">
+                        <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-400">
+                            <Command size={28} />
+                        </div>
+                        <h3 className="text-lg font-bold text-white mb-2">Web Search</h3>
+                        <p className="text-sm text-zinc-500">Integrated Tavily API for real-time information retrieval from the web.</p>
+                    </div>
+                    <div className="p-6">
+                        <div className="w-16 h-16 bg-yellow-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-yellow-400">
+                            <Sparkles size={28} />
+                        </div>
+                        <h3 className="text-lg font-bold text-white mb-2">Weather Data</h3>
+                        <p className="text-sm text-zinc-500">Instant visual weather cards and forecasts based on your location query.</p>
+                    </div>
+                    <div className="p-6">
+                        <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-green-400">
+                            <MessageSquare size={28} />
+                        </div>
+                        <h3 className="text-lg font-bold text-white mb-2">DeepMind Mode</h3>
+                        <p className="text-sm text-zinc-500">Multi-step reasoning and consensus for complex problem solving.</p>
+                    </div>
                 </div>
             </section>
 
@@ -176,7 +295,10 @@ function LandingPage() {
                         <Sparkles size={16} className="text-zinc-500" />
                         <span className="text-sm text-zinc-500">© 2025 QueueBot Inc.</span>
                     </div>
-                    <div className="flex gap-6">
+                    <div className="flex flex-wrap gap-6">
+                        <Link to="/changelog" className="text-sm text-zinc-500 hover:text-white transition-colors">Changelog</Link>
+                        <a href="#features" className="text-sm text-zinc-500 hover:text-white transition-colors">Features</a>
+                        <a href="#" className="text-sm text-zinc-500 hover:text-white transition-colors">Documentation</a>
                         <a href="#" className="text-sm text-zinc-500 hover:text-white transition-colors">Twitter</a>
                         <a href="#" className="text-sm text-zinc-500 hover:text-white transition-colors">GitHub</a>
                         <a href="#" className="text-sm text-zinc-500 hover:text-white transition-colors">Discord</a>

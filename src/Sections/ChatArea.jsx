@@ -822,67 +822,13 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             {/* Welcome Screen - Shows when no chat is started */}
             {!isChatStarted && (
                 <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    className="flex flex-col items-center justify-center gap-6 px-4 mb-20"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ type: "spring", stiffness: 200, damping: 20 }}
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[200%] pointer-events-none"
                 >
-                    {/* Logo */}
-                    <motion.div
-                        initial={{ scale: 0.8, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
-                        className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-2xl shadow-white/10 p-4"
-                    >
-                        <img src="/logo.svg" alt="QueueBot" className="w-full h-full" />
-                    </motion.div>
-
-                    {/* Welcome Text */}
-                    <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                        className="text-center"
-                    >
-                        <h1 className="text-3xl md:text-4xl font-bold text-text mb-2">
-                            Welcome to QueueBot
-                        </h1>
-                        <p className="text-textLight text-sm md:text-base">
-                            Your intelligent AI assistant. How can I help you today?
-                        </p>
-                    </motion.div>
-
-                    {/* Suggested Prompts */}
-                    <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 }}
-                        className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl mt-4"
-                    >
-                        {[
-                            { icon: "💡", text: "Explain quantum computing" },
-                            { icon: "🎨", text: "Generate a creative image" },
-                            { icon: "📊", text: "Analyze data trends" },
-                            { icon: "✍️", text: "Write a professional email" }
-                        ].map((prompt, index) => (
-                            <motion.button
-                                key={index}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.4 + index * 0.05 }}
-                                whileHover={{ scale: 1.02, backgroundColor: "rgba(255, 255, 255, 0.05)" }}
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() => {
-                                    setpromptInput(prompt.text);
-                                    setIsSendPrompt(true);
-                                }}
-                                className="p-4 bg-tertiary border border-border rounded-xl text-left hover:border-white/20 transition-all"
-                            >
-                                <span className="text-2xl mb-2 block">{prompt.icon}</span>
-                                <span className="text-sm text-text">{prompt.text}</span>
-                            </motion.button>
-                        ))}
-                    </motion.div>
+                    <img src="/logo.svg" alt="QueueBot" className="w-24 h-24 md:w-32 md:h-32 opacity-40" />
                 </motion.div>
             )}
 
