@@ -14,12 +14,7 @@ function LandingPage() {
             <div className="fixed top-6 left-0 right-0 z-50 flex justify-center px-6">
                 <nav className="w-full max-w-3xl bg-[#0A0A0A]/80 backdrop-blur-xl border border-white/10 rounded-full px-6 py-3 flex items-center justify-between shadow-2xl shadow-black/50">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center border border-white/5">
-                            <Sparkles size={16} className="text-white" fill="currentColor" />
-                        </div>
-                        <span className="text-sm font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">
-                            QueueBot
-                        </span>
+                        <img src="/logo.svg" alt="QueueBot" className="h-8 w-8" />
                     </div>
                     <div className="flex items-center gap-6">
                         {token ? (

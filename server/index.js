@@ -15,6 +15,9 @@ import jwt from 'jsonwebtoken';
 import { authMiddleware } from './middleware/auth.js';
 import multer from 'multer';
 import fs from 'fs';
+import nodemailer from 'nodemailer';
+import crypto from 'crypto';
+import { MagicLinkToken } from './models.js'; // Import MagicLinkToken Model
 
 dotenv.config({ override: true });
 connectDB(); // Initialize DB
@@ -29,6 +32,142 @@ app.use(express.json({ limit: '100mb' })); // Increase limit for file uploads
 const store = {};
 const chatContexts = {}; // Store conversation contexts by userId
 const deepMindSessions = {}; // Store DeepMind processing sessions
+
+// Email Transporter (Configure with your SMTP details or use a service like SendGrid/Resend)
+const transporter = nodemailer.createTransport({
+    service: 'gmail', // Example: using Gmail (requires App Password)
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+// Endpoint: Send Magic Link
+app.post('/api/auth/magic-link', async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required" });
+
+    try {
+        // Generate Token
+        const token = crypto.randomBytes(32).toString('hex');
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+        // Store Token (Upsert)
+        await MagicLinkToken.findOneAndUpdate(
+            { email },
+            {
+                email,
+                token: hashedToken,
+                expiresAt: new Date(+new Date() + 15 * 60 * 1000) // 15 mins
+            },
+            { upsert: true, new: true }
+        );
+
+        // Send Email
+        // Use the general referer origin or default for the link
+        const appUrl = req.headers.origin || 'http://localhost:5173';
+        const magicLink = `${appUrl}/verify-magic-link?token=${token}&email=${encodeURIComponent(email)}`;
+
+        const mailOptions = {
+            from: process.env.EMAIL_USER || 'noreply@queuebot.com',
+            to: email,
+            subject: 'Sign in to QueueBot',
+            html: `
+                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2>Sign in to QueueBot</h2>
+                    <p>Click the button below to sign in. This link is valid for 15 minutes.</p>
+                    <a href="${magicLink}" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Sign In</a>
+                    <p style="margin-top: 24px; font-size: 12px; color: #666;">If you didn't request this, you can safely ignore this email.</p>
+                </div>
+            `
+        };
+
+        if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+            await transporter.sendMail(mailOptions);
+            console.log(`[Auth] Magic link sent to ${email}`);
+            res.json({ success: true, message: "Magic link sent!" });
+        } else {
+            console.log(`[Auth] (DEV Mode - No SMTP) Magic Link for ${email}: ${magicLink}`);
+            res.json({ success: true, message: "Magic link generated (Check server console for link)" });
+        }
+
+    } catch (error) {
+        console.error("Magic Link Error:", error);
+        res.status(500).json({ error: "Failed to send magic link" });
+    }
+});
+
+// Endpoint: Verify Magic Link
+app.post('/api/auth/verify-magic-link', async (req, res) => {
+    const { email, token } = req.body;
+    if (!email || !token) return res.status(400).json({ error: "Invalid link" });
+
+    try {
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+        // Find valid token
+        const record = await MagicLinkToken.findOne({
+            email,
+            token: hashedToken,
+            expiresAt: { $gt: new Date() }
+        });
+
+        if (!record) {
+            return res.status(400).json({ error: "Invalid or expired link" });
+        }
+
+        // Find or Create User
+        // MERGE LOGIC: Try to find user by email.
+        let user = await User.findOne({ email });
+
+        if (user) {
+            // User exists (could be created via Google or Email previously)
+            console.log(`[Auth] Existing user logged in via Magic Link: ${user.email}`);
+            if (!user.isVerified) {
+                user.isVerified = true;
+                await user.save();
+            }
+        } else {
+            // Create new user
+            console.log(`[Auth] Creating new user via Magic Link: ${email}`);
+            const userId = 'user_' + crypto.randomBytes(8).toString('hex');
+
+            user = await User.create({
+                userId,
+                email,
+                authProvider: 'email',
+                isVerified: true,
+                displayName: email.split('@')[0],
+                photoURL: `https://ui-avatars.com/api/?name=${email}&background=random`
+            });
+        }
+
+        // Delete used token
+        await MagicLinkToken.deleteOne({ _id: record._id });
+
+        // Generate JWT
+        const jwtToken = jwt.sign(
+            { id: user.userId, email: user.email },
+            process.env.JWT_SECRET || 'secret',
+            { expiresIn: '7d' }
+        );
+
+        res.json({
+            success: true,
+            token: jwtToken,
+            user: {
+                userId: user.userId,
+                email: user.email,
+                displayName: user.displayName,
+                photoURL: user.photoURL
+            }
+        });
+
+    } catch (error) {
+        console.error("Link Verification Error:", error);
+        res.status(500).json({ error: "Verification failed" });
+    }
+});
 
 // Context size limits (in tokens approximately)
 const MAX_CONTEXT_TOKENS = 4000;
@@ -172,185 +311,119 @@ async function summarizeContext(messages, modelKey = 'llama-3.3-70b') {
     }
 }
 
-// Save or update chat context
+// Save or update chat context (Persisted to MongoDB)
 app.post('/context/save', async (req, res) => {
-    const { userId, messages, projectId } = req.body; // Extract projectId
+    const { userId, messages, projectId, sessionId } = req.body;
 
     if (!userId || !messages) {
         return res.status(400).json({ error: 'userId and messages are required' });
     }
 
-    // Save to Memory
-    // Save to Memory (Merge to preserve locks)
-    chatContexts[userId] = {
-        ...chatContexts[userId],
-        messages: messages,
-        lastUpdated: new Date().toISOString(),
-        tokenCount: getContextSize(messages),
-        sessionId: chatContexts[userId]?.sessionId || null
-    };
+    try {
+        let activeSessionId = sessionId;
+        let isNewSession = false;
 
-    let isNewSession = false;
+        // 1. Resolve Session ID
+        if (activeSessionId) {
+            const session = await Session.findById(activeSessionId);
+            if (!session) activeSessionId = null; // Session invalid/deleted
+        }
 
-    // Auto-Save Strategy
-    console.log(`[Context Save] userId: ${userId.substring(0, 8)}, existingSessionId: ${chatContexts[userId]?.sessionId || 'NONE'}, isConnected: ${isConnected}`);
+        // 2. Create New Session if needed (and we have messages to start)
+        if (!activeSessionId && messages.length > 0) {
+            const firstUserMsg = messages.find(m => m.role === 'user');
+            const title = firstUserMsg
+                ? (firstUserMsg.content.substring(0, 50) + (firstUserMsg.content.length > 50 ? '...' : ''))
+                : 'New Conversation';
 
-    if (!isConnected) {
-        console.log('[Context Save] DB disconnected, using Memory Store');
-        // Fallback: Save to In-Memory Session Store for Sidebar display
-        if (!chatContexts[userId].sessionId) {
-            chatContexts[userId].sessionId = `mem_${Date.now()}`;
+            const newSession = await Session.create({
+                userId,
+                projectId: projectId || null,
+                title,
+                preview: title,
+                model: messages[0].model || 'gpt-oss-120b',
+                updatedAt: new Date()
+            });
+            activeSessionId = newSession._id;
             isNewSession = true;
+            console.log(`[DB] Created new session: ${activeSessionId}`);
+        } else if (activeSessionId) {
+            // Update timestamp
+            await Session.findByIdAndUpdate(activeSessionId, { updatedAt: new Date() });
         }
-        updateMemorySession(userId, chatContexts[userId].sessionId, messages);
-    } else {
-        // Save to MongoDB - AWAIT to ensure session is created before responding
-        try {
-            let sessionId = chatContexts[userId].sessionId;
 
-            // If no session exists for this user in memory, create new with locking
-            if (!sessionId) {
-                if (chatContexts[userId].sessionCreationPromise) {
-                    // Wait for pending creation (lock)
-                    console.log(`[Context Save] Waiting for session creation lock...`);
-                    sessionId = await chatContexts[userId].sessionCreationPromise;
-                    chatContexts[userId].sessionId = sessionId;
-                } else {
-                    // Create lock
-                    isNewSession = true;
-                    chatContexts[userId].sessionCreationPromise = (async () => {
-                        const firstUserMsg = messages.find(m => m.role === 'user');
+        // 3. Sync Messages (Deduplication Logic)
+        if (activeSessionId && messages.length > 0) {
+            // Fetch existing messages sorted by creation time/index
+            // Note: MongoDB doesn't guarantee natural order without a sort key if we don't store index. 
+            // We'll rely on timestamp. Ideally we should add an 'index' field, but for now we sort by timestamp.
+            const existingMessages = await Message.find({ sessionId: activeSessionId }).sort({ timestamp: 1 });
 
-                        // Generate AI title using Groq
-                        let title = 'New Conversation';
-                        if (firstUserMsg) {
-                            try {
-                                const titleCompletion = await groq.chat.completions.create({
-                                    messages: [
-                                        {
-                                            role: 'system',
-                                            content: 'You are a title generator. Create a concise 3-5 word title that captures the essence of the user\'s query. Return ONLY the title, no quotes or punctuation.'
-                                        },
-                                        {
-                                            role: 'user',
-                                            content: `Generate a title for this query: "${firstUserMsg.content}"`
-                                        }
-                                    ],
-                                    model: 'llama-3.3-70b-versatile',
-                                    temperature: 0.7,
-                                    max_completion_tokens: 20,
-                                });
-                                title = titleCompletion.choices[0]?.message?.content?.trim() || firstUserMsg.content.substring(0, 30);
-                            } catch (err) {
-                                console.error('[Title Generation] Failed:', err);
-                                title = firstUserMsg.content.substring(0, 30);
-                            }
-                        }
+            for (let i = 0; i < messages.length; i++) {
+                const msg = messages[i];
+                // Skip UI-only messages
+                if (['deepmind-progress', 'separator'].includes(msg.role)) continue;
 
-                        const newSession = await Session.create({
-                            userId,
-                            projectId: projectId || null, // Associate session with project
-                            title,
-                            preview: messages[messages.length - 1]?.content.substring(0, 50) || '...',
-                            updatedAt: new Date()
-                        });
-                        console.log(`[Context Save] Created NEW Session: ${newSession._id} - "${title}"`);
-                        return newSession._id;
-                    })();
+                if (i < existingMessages.length) {
+                    // Update existing message (e.g., streaming finished, feedback added)
+                    const dbMsg = existingMessages[i];
+                    let needsSave = false;
 
-                    // Wait for completion and assign
-                    try {
-                        sessionId = await chatContexts[userId].sessionCreationPromise;
-                        chatContexts[userId].sessionId = sessionId;
-                    } finally {
-                        // Release lock
-                        setTimeout(() => {
-                            if (chatContexts[userId]) {
-                                delete chatContexts[userId].sessionCreationPromise;
-                            }
-                        }, 1000);
+                    if (dbMsg.content !== msg.content) {
+                        dbMsg.content = msg.content;
+                        needsSave = true;
                     }
-                }
-            } else {
-                // Update existing session preview
-                await Session.findByIdAndUpdate(sessionId, {
-                    updatedAt: new Date(),
-                    preview: messages[messages.length - 1]?.content.substring(0, 50) || '...',
-                });
-                console.log(`[Context Save] Updated Session: ${sessionId}`);
-            }
+                    // Handle attachment updates (e.g. data URL replaced with cloud URL)
+                    if (msg.attachment && (!dbMsg.attachment || dbMsg.attachment.content !== msg.attachment.content)) {
+                        dbMsg.attachment = msg.attachment;
+                        needsSave = true;
+                    }
+                    // Handle Generated Image updates
+                    if (msg.generatedImage && (!dbMsg.generatedImage || dbMsg.generatedImage.url !== msg.generatedImage.url)) {
+                        dbMsg.generatedImage = msg.generatedImage;
+                        needsSave = true;
+                    }
+                    // Handle Feedback updates
+                    if (msg.feedback !== undefined && dbMsg.feedback !== msg.feedback) {
+                        dbMsg.feedback = msg.feedback;
+                        needsSave = true;
+                    }
 
-            // Save individual messages to DB (async, don't wait)
-            (async () => {
-                const messagesToSave = messages
-                    .filter(m => m.role === 'user' || m.role === 'assistant')
-                    .map(msg => ({
-                        sessionId: chatContexts[userId].sessionId,
+                    if (needsSave) await dbMsg.save();
+                } else {
+                    // Insert NEW message
+                    await Message.create({
+                        sessionId: activeSessionId,
                         role: msg.role,
-                        content: msg.content || (msg.type === 'image_generated' ? '[Image Generated]' : ' '),
-                        // New fields for structured image content
-                        type: msg.type || 'text',
-                        generatedImage: msg.generatedImage || undefined,
+                        content: msg.content || ' ',
                         model: msg.model || 'unknown',
-                        mode: msg.mode || 'standard',
-                        attachment: msg.attachment, // FIX: Save attachment data to DB
-                        feedback: msg.feedback || null, // Persist feedback
+                        type: msg.type || 'text',
+                        generatedImage: msg.generatedImage,
+                        attachment: msg.attachment,
+                        feedback: msg.feedback,
                         timestamp: new Date()
-                    }));
-
-                // Debug: Check mapping
-                if (messagesToSave.some(m => m.attachment)) {
-                    console.log('[Message Save] Saving messages with attachments:', messagesToSave.filter(m => m.attachment).length);
+                    });
                 }
-
-                await Message.deleteMany({ sessionId: chatContexts[userId].sessionId });
-                if (messagesToSave.length > 0) {
-                    await Message.insertMany(messagesToSave);
-                    console.log(`[Context Save] Saved ${messagesToSave.length} messages to DB`);
-                }
-            })().catch(err => console.error('[Message Save] Error:', err));
-
-        } catch (dbErr) {
-            console.error('DB Auto-Save Error:', dbErr);
+            }
         }
+
+        res.json({
+            success: true,
+            sessionId: activeSessionId,
+            isNewSession
+        });
+
+    } catch (error) {
+        console.error('Error saving context:', error);
+        res.status(500).json({ error: 'Failed to save context' });
     }
-
-    // Debug: Check if hiddenContent is being saved
-    const hasHidden = messages.some(m => m.hiddenContent);
-    if (hasHidden) console.log(`[Context Save] Saved context with hiddenContent for user ${userId.substring(0, 5)}...`);
-
-    console.log(`[Context Save] Responding with sessionId: ${chatContexts[userId]?.sessionId}, isNewSession: ${isNewSession}`);
-
-    res.json({
-        success: true,
-        sessionId: chatContexts[userId]?.sessionId,
-        isNewSession: isNewSession,
-        tokenCount: chatContexts[userId].tokenCount,
-        needsSummarization: chatContexts[userId].tokenCount > CONTEXT_WARNING_THRESHOLD
-    });
-});
-
-// Get chat context
-app.get('/context/:userId', (req, res) => {
-    const { userId } = req.params;
-    const context = chatContexts[userId]; // In future: Load from `Message.find({ sessionId })`
-
-    if (!context) {
-        return res.json({ messages: [], tokenCount: 0 });
-    }
-
-    res.json({
-        messages: context.messages,
-        tokenCount: context.tokenCount,
-        lastUpdated: context.lastUpdated,
-        needsSummarization: context.tokenCount > CONTEXT_WARNING_THRESHOLD
-    });
 });
 
 // Delete chat context
 app.delete('/context/:userId', (req, res) => {
     const { userId } = req.params;
-    delete chatContexts[userId];
+    // We might want to clear in-memory or do nothing if we rely on DB
+    // chatContexts[userId] = null; 
     res.json({ success: true });
 });
 
@@ -435,10 +508,33 @@ app.get('/models', async (req, res) => {
 
 app.post('/prepare-stream', async (req, res) => {
     const streamId = Date.now().toString() + Math.random().toString(36).substring(7);
-    const { userId, messages, projectId } = req.body;
+    const { userId, messages, projectId, sessionId } = req.body;
 
     // Get stored context and merge with current messages
     let contextMessages = messages || [];
+
+    // CRITICAL FIX: Load conversation history from database if we have an active session
+    if (sessionId) {
+        try {
+            const sessionMessages = await Message.find({ sessionId }).sort({ timestamp: 1 });
+            if (sessionMessages && sessionMessages.length > 0) {
+                // Convert DB messages to context format (exclude the current user message which is already in 'messages')
+                const historicalMessages = sessionMessages
+                    .filter(msg => !['deepmind-progress', 'separator'].includes(msg.role))
+                    .map(msg => ({
+                        role: msg.role,
+                        content: msg.content
+                    }));
+
+                console.log(`[Stream] Loaded ${historicalMessages.length} messages from session ${sessionId}`);
+
+                // Use historical context + new message
+                contextMessages = [...historicalMessages, ...messages];
+            }
+        } catch (err) {
+            console.error('[Stream] Failed to load session context:', err);
+        }
+    }
 
     // Inject Project Context if this is a new session
     if (projectId && (!chatContexts[userId] || chatContexts[userId].messages.length === 0)) {
@@ -456,7 +552,8 @@ app.post('/prepare-stream', async (req, res) => {
         }
     }
 
-    if (userId && chatContexts[userId]) {
+    // Fallback: Check in-memory context (for backward compatibility)
+    if (!sessionId && userId && chatContexts[userId]) {
         const storedContext = chatContexts[userId];
         const contextSize = storedContext.tokenCount;
 
@@ -1059,18 +1156,30 @@ app.post('/api/auth/google', async (req, res) => {
         // Sync User in DB
         let user = null;
         if (isConnected) {
-            user = await User.findOne({ userId: googleId }); // Use googleId as userId
+            // Find user by Google ID OR Email (Account Merging)
+            user = await User.findOne({
+                $or: [{ userId: googleId }, { email: email }]
+            });
+
             if (!user) {
+                // Create new user if not found
                 user = await User.create({
                     userId: googleId,
                     email,
                     displayName: name,
-                    photoURL: picture
+                    photoURL: picture,
+                    authProvider: 'google',
+                    isVerified: true
                 });
             } else {
-                // Update profile
+                // Update existing user profile
+                // We keep the existing userId (even if it's 'user_...') to preserve chat history
                 user.lastLogin = new Date();
-                user.photoURL = picture;
+                user.displayName = name || user.displayName;
+                user.photoURL = picture || user.photoURL;
+                if (!user.isVerified) user.isVerified = true;
+                // Optionally allow Google ID linking if we had a secondary ID field, 
+                // but for now, reusing the existing document is sufficient.
                 await user.save();
             }
         } else {

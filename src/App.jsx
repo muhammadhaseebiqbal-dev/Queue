@@ -5,6 +5,8 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 import Workspace from "./Workspace";
 import LandingPage from "./LandingPage";
 import SignIn from "./SignIn";
+import VerifyMagicLink from "./VerifyMagicLink";
+import EmailSent from "./EmailSent";
 
 function App() {
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_CLIENT_ID";
@@ -16,6 +18,8 @@ function App() {
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/signin" element={<SignIn />} />
+            <Route path="/verify-magic-link" element={<VerifyMagicLink />} />
+            <Route path="/email-sent" element={<EmailSent />} />
 
             <Route element={<ProtectedRoute />}>
               <Route path="/app" element={<Workspace />} />

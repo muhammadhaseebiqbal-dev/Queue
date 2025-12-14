@@ -9,9 +9,9 @@ import { API_URL } from './config';
 
 function SignIn() {
     const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [successMessage, setSuccessMessage] = useState('');
 
     const navigate = useNavigate();
     const { login } = useAuth();
@@ -30,37 +30,31 @@ function SignIn() {
             console.error("Auth failed:", err);
             setError("Login Failed. Please try again.");
             setLoading(false);
+        } finally {
+            setLoading(false);
         }
     };
 
     const googleLogin = useGoogleLogin({
         onSuccess: handleGoogleSuccess,
-        onError: () => {
-            setError("Google Login Failed");
-            setLoading(false);
-        }
+        onError: () => setError("Google Login Failed"),
     });
 
-    const handleEmailSignIn = async (e) => {
+    const handleMagicLinkSignIn = async (e) => {
         e.preventDefault();
+        setLoading(true);
+        setError('');
 
-        // Development Hardcoded Credentials
-        if (email === 'admin@admin.com' && password === 'admin') {
-            const devUser = {
-                userId: 'dev-admin-id',
-                email: 'admin@admin.com',
-                displayName: 'Admin User',
-                photoURL: null
-            };
-            const devToken = 'dev-token-placeholder';
-
-            login(devUser, devToken);
-            navigate('/app');
-            return;
+        try {
+            await axios.post(`${API_URL}/api/auth/magic-link`, { email });
+            // Navigate to success page instead of inline message
+            navigate('/email-sent', { state: { email } });
+        } catch (err) {
+            console.error("Magic Link failed:", err);
+            setError(err.response?.data?.error || "Failed to send login link.");
+        } finally {
+            setLoading(false);
         }
-
-        // For now, email is not implemented securely without Firebase or custom implementation
-        alert("Please use Google Sign In for now (Native implementation in progress)");
     };
 
     return (
@@ -78,11 +72,11 @@ function SignIn() {
                     className="max-w-md w-full mx-auto"
                 >
                     <div className="mb-10">
-                        <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mb-6 shadow-lg shadow-white/10">
-                            <Sparkles size={24} className="text-black" fill="currentColor" />
+                        <div className="w-12 h-12 flex items-center justify-center mb-6  p-2">
+                            <img src="/logo.svg" alt="QueueBot" className="w-full h-full" />
                         </div>
                         <h2 className="text-3xl font-bold text-white mb-2">Welcome Back</h2>
-                        <p className="text-zinc-500">Enter your credentials to access the workspace.</p>
+                        <p className="text-zinc-500">Sign in with Google or your email.</p>
                     </div>
 
                     {/* Google Sign In */}
@@ -104,7 +98,7 @@ function SignIn() {
                             <div className="w-full border-t border-white/10"></div>
                         </div>
                         <div className="relative flex justify-center text-xs uppercase tracking-widest">
-                            <span className="px-2 bg-[#0A0A0A] text-zinc-600">Or</span>
+                            <span className="px-2 bg-[#0A0A0A] text-zinc-600">Or use email</span>
                         </div>
                     </div>
 
@@ -114,7 +108,13 @@ function SignIn() {
                         </div>
                     )}
 
-                    <form onSubmit={handleEmailSignIn} className="space-y-4">
+                    {successMessage && (
+                        <div className="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg text-green-500 text-sm text-center">
+                            {successMessage}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleMagicLinkSignIn} className="space-y-4">
                         <div className="space-y-1">
                             <label className="text-xs font-medium text-zinc-400 ml-1">Email</label>
                             <div className="relative">
@@ -129,26 +129,13 @@ function SignIn() {
                                 />
                             </div>
                         </div>
-                        <div className="space-y-1">
-                            <label className="text-xs font-medium text-zinc-400 ml-1">Password</label>
-                            <div className="relative">
-                                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-                                <input
-                                    type="password"
-                                    value={password}
-                                    onChange={e => setPassword(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-10 py-3 text-sm focus:outline-none focus:border-white/30 focus:bg-white/10 transition-colors text-white"
-                                    placeholder="••••••••"
-                                    required
-                                />
-                            </div>
-                        </div>
+
                         <button
                             type="submit"
                             disabled={loading}
                             className="w-full bg-zinc-800 text-white font-medium h-12 rounded-lg hover:bg-zinc-700 transition-colors border border-white/5 mt-2"
                         >
-                            {loading ? <Loader2 className="animate-spin mx-auto" /> : "Sign In with Email"}
+                            {loading ? <Loader2 className="animate-spin mx-auto" /> : "Continue"}
                         </button>
 
                         <p className="text-center text-xs text-zinc-600 mt-6">

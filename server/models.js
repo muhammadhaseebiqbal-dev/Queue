@@ -21,12 +21,21 @@ export const connectDB = async () => {
 
 // User Schema
 const userSchema = new mongoose.Schema({
-    userId: { type: String, required: true, unique: true, index: true }, // Firebase UID
-    email: { type: String, required: true },
+    userId: { type: String, required: true, unique: true, index: true }, // Firebase UID or generated ID
+    email: { type: String, required: true, unique: true },
     displayName: { type: String },
     photoURL: { type: String },
+    authProvider: { type: String, enum: ['google', 'email'], default: 'email' },
+    isVerified: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now },
     lastLogin: { type: Date, default: Date.now }
+});
+
+// Magic Link Token Schema
+const magicLinkTokenSchema = new mongoose.Schema({
+    email: { type: String, required: true },
+    token: { type: String, required: true }, // Should be hashed in production
+    expiresAt: { type: Date, required: true, default: () => new Date(+new Date() + 15 * 60 * 1000), expires: 0 } // Auto-delete when this time is reached
 });
 
 // Project Schema (Folders)
@@ -85,8 +94,9 @@ const messageSchema = new mongoose.Schema({
 });
 
 // Models
-export const User = mongoose.model('User', userSchema);
-export const Project = mongoose.model('Project', projectSchema);
-export const Session = mongoose.model('Session', sessionSchema);
-export const Message = mongoose.model('Message', messageSchema);
+export const User = mongoose.models.User || mongoose.model('User', userSchema);
+export const Project = mongoose.models.Project || mongoose.model('Project', projectSchema);
+export const Session = mongoose.models.Session || mongoose.model('Session', sessionSchema);
+export const Message = mongoose.models.Message || mongoose.model('Message', messageSchema);
+export const MagicLinkToken = mongoose.models.MagicLinkToken || mongoose.model('MagicLinkToken', magicLinkTokenSchema);
 

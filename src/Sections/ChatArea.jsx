@@ -102,13 +102,27 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
         });
     };
 
+    // Track the last loaded session to prevent duplicate loads
+    const loadedSessionRef = useRef(null);
+
     // Load or reset chat based on session ID changes
     useEffect(() => {
+        const currentSessionId = PanelInteractionVars?.activeSessionId;
+
+        // Skip if we've already loaded this exact session
+        if (loadedSessionRef.current === currentSessionId && currentSessionId !== null) {
+            return;
+        }
+
+        // Clear immediately to avoid stale state
+        setcontext([]);
+        setIsChatStarted(false);
+
         const loadSession = async () => {
-            if (PanelInteractionVars?.activeSessionId) {
+            if (currentSessionId) {
                 // Load existing session
                 try {
-                    const response = await axios.get(`${API_URL}/api/messages/${PanelInteractionVars.activeSessionId}`);
+                    const response = await axios.get(`${API_URL}/api/messages/${currentSessionId}`);
                     const loadedMessages = response.data.messages;
 
                     if (loadedMessages && loadedMessages.length > 0) {
@@ -116,23 +130,25 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                         const formattedMessages = loadedMessages.map(msg => ({
                             role: msg.role,
                             content: msg.content,
-                            generatedImage: msg.generatedImage, // Include generated image data
-                            type: msg.type, // Include message type
+                            generatedImage: msg.generatedImage,
+                            type: msg.type,
                             model: msg.model,
                             mode: msg.mode,
-                            attachment: msg.attachment // Include attachment data
+                            attachment: msg.attachment
                         }));
 
-                        console.log(`[ChatArea] Loaded ${formattedMessages.length} messages for session ${PanelInteractionVars.activeSessionId}`);
-                        console.log('[ChatArea] Sample message:', formattedMessages[0]);
+                        console.log(`[ChatArea] Loaded ${formattedMessages.length} messages for session ${currentSessionId}`);
 
                         setcontext(formattedMessages);
                         setIsChatStarted(true);
 
-                        // CRITICAL: Tell backend which session is active
+                        // Mark this session as loaded
+                        loadedSessionRef.current = currentSessionId;
+
+                        // Tell backend which session is active
                         await axios.post(`${API_URL}/api/session/activate`, {
                             userId,
-                            sessionId: PanelInteractionVars.activeSessionId
+                            sessionId: currentSessionId
                         });
                     }
                 } catch (error) {
@@ -140,6 +156,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 }
             } else {
                 // Reset for new chat
+                loadedSessionRef.current = null;
                 setIsChatStarted(false);
                 setcontext([]);
                 setpromptInput('');
@@ -153,7 +170,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
         };
 
         loadSession();
-    }, [PanelInteractionVars?.activeSessionId, userId, PanelInteractionVars?.activeProject])
+    }, [PanelInteractionVars?.activeSessionId, userId])
 
     // Auto-select largest context model when in a project, reset to default otherwise
     useEffect(() => {
@@ -213,27 +230,70 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
         previousModel.current = selectedModel;
     }, [selectedModel]);
 
+    // Use a Ref to track activeSessionId synchronously to prevent race conditions during rapid updates
+    const activeSessionIdRef = useRef(PanelInteractionVars?.activeSessionId);
+    const isCreatingSessionRef = useRef(false); // Only prevent duplicate session creation, not saves
+
+    useEffect(() => {
+        activeSessionIdRef.current = PanelInteractionVars?.activeSessionId;
+        // If we now have a session ID, we're no longer creating one
+        if (PanelInteractionVars?.activeSessionId) {
+            isCreatingSessionRef.current = false;
+        }
+    }, [PanelInteractionVars?.activeSessionId]);
+
     // Save context to backend whenever it changes (debounced)
     useEffect(() => {
         if (context.length > 0) {
             const saveTimeout = setTimeout(() => {
+                // FORCE use the ref to get the absolute latest ID, even if React state hasn't re-rendered yet
+                const currentSessionId = activeSessionIdRef.current || PanelInteractionVars?.activeSessionId;
+
+                // Only block if we're creating a NEW session (no sessionId) AND already creating one
+                if (!currentSessionId && isCreatingSessionRef.current) {
+                    console.log('[ChatArea] Session creation already in progress, skipping...');
+                    return;
+                }
+
+                // Mark that we're creating a session if we don't have one
+                if (!currentSessionId) {
+                    isCreatingSessionRef.current = true;
+                }
+
                 axios.post(`${API_URL}/context/save`, {
                     userId,
                     messages: context,
-                    projectId: PanelInteractionVars?.activeProject?._id // Include project ID if active
+                    sessionId: currentSessionId,
+                    projectId: PanelInteractionVars?.activeProject?._id
                 })
                     .then((response) => {
                         // Only refresh sidebar if backend created a NEW session
-                        if (response.data?.isNewSession && PanelInteractionVars.triggerSidebarRefresh) {
-                            console.log('[ChatArea] New session detected, refreshing sidebar');
-                            PanelInteractionVars.triggerSidebarRefresh();
-                            if (PanelInteractionVars.setActiveSessionId && response.data.sessionId) {
-                                PanelInteractionVars.setActiveSessionId(response.data.sessionId);
+                        if (response.data?.isNewSession) {
+                            // IMMEDIATELY update the ref so the next debounce call sees it
+                            if (response.data.sessionId) {
+                                activeSessionIdRef.current = response.data.sessionId; // Sync Ref immediately
+                                isCreatingSessionRef.current = false; // Session created, unlock
+
+                                // DON'T call setActiveSessionId here - it would trigger a reload
+                                // We're already in an active conversation with these messages
+                                // Just update the ref silently and refresh the sidebar
+                            }
+
+                            if (PanelInteractionVars.triggerSidebarRefresh) {
+                                console.log('[ChatArea] New session detected, refreshing sidebar only');
+                                PanelInteractionVars.triggerSidebarRefresh();
+                                // Note: We intentionally don't call setActiveSessionId to avoid reloading
                             }
                         }
                     })
-                    .catch(error => console.error('Error saving context:', error));
-            }, 300); // Wait 300ms before saving to batch rapid changes
+                    .catch(error => {
+                        console.error('Error saving context:', error);
+                        // Release the lock on error
+                        if (!currentSessionId) {
+                            isCreatingSessionRef.current = false;
+                        }
+                    });
+            }, 500); // 500ms debounce - longer to batch more updates together
 
             return () => clearTimeout(saveTimeout);
         }
@@ -407,6 +467,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 isWebSearchEnabled: isWebSearchEnabled,
                 attachment: attachmentToSend, // Pass attachment to backend
                 projectId: PanelInteractionVars?.activeProject?._id, // Pass active project ID
+                sessionId: activeSessionIdRef.current || PanelInteractionVars?.activeSessionId, // Pass session ID for context loading
                 messages: [{ role: "user", content: messageToSend }]
             });
 
@@ -572,6 +633,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                 axios.post(`${API_URL}/context/save`, {
                                     userId,
                                     messages: updated,
+                                    sessionId: PanelInteractionVars.activeSessionId, // Fix for correct session update
                                     projectId: PanelInteractionVars?.activeProject?._id
                                 }).then(() => console.log('[Stream] Context saved with persistent Image URL'))
                                     .catch(e => console.error('Failed to save persistent image:', e));
@@ -608,13 +670,18 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     // Update the last message with streamed content in real-time
                     setcontext(prev => {
                         const updated = [...prev];
-                        updated[updated.length - 1] = {
-                            ...updated[updated.length - 1],
-                            content: streamingMessageRef.current,
-                            streaming: true,
-                            // Ensure search status is done once content starts flowing
-                            searchStatus: updated[updated.length - 1].searchStatus === 'searching' ? 'done' : updated[updated.length - 1].searchStatus
-                        };
+                        const lastIndex = updated.length - 1;
+
+                        // Safety check: ensure last message exists
+                        if (lastIndex >= 0 && updated[lastIndex]) {
+                            updated[lastIndex] = {
+                                ...updated[lastIndex],
+                                content: streamingMessageRef.current,
+                                streaming: true,
+                                // Ensure search status is done once content starts flowing
+                                searchStatus: updated[lastIndex].searchStatus === 'searching' ? 'done' : updated[lastIndex].searchStatus
+                            };
+                        }
                         return updated;
                     });
                 }
@@ -752,6 +819,73 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 </div>
             )}
 
+            {/* Welcome Screen - Shows when no chat is started */}
+            {!isChatStarted && (
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className="flex flex-col items-center justify-center gap-6 px-4 mb-20"
+                >
+                    {/* Logo */}
+                    <motion.div
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
+                        className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-2xl shadow-white/10 p-4"
+                    >
+                        <img src="/logo.svg" alt="QueueBot" className="w-full h-full" />
+                    </motion.div>
+
+                    {/* Welcome Text */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="text-center"
+                    >
+                        <h1 className="text-3xl md:text-4xl font-bold text-text mb-2">
+                            Welcome to QueueBot
+                        </h1>
+                        <p className="text-textLight text-sm md:text-base">
+                            Your intelligent AI assistant. How can I help you today?
+                        </p>
+                    </motion.div>
+
+                    {/* Suggested Prompts */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl mt-4"
+                    >
+                        {[
+                            { icon: "💡", text: "Explain quantum computing" },
+                            { icon: "🎨", text: "Generate a creative image" },
+                            { icon: "📊", text: "Analyze data trends" },
+                            { icon: "✍️", text: "Write a professional email" }
+                        ].map((prompt, index) => (
+                            <motion.button
+                                key={index}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.4 + index * 0.05 }}
+                                whileHover={{ scale: 1.02, backgroundColor: "rgba(255, 255, 255, 0.05)" }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => {
+                                    setpromptInput(prompt.text);
+                                    setIsSendPrompt(true);
+                                }}
+                                className="p-4 bg-tertiary border border-border rounded-xl text-left hover:border-white/20 transition-all"
+                            >
+                                <span className="text-2xl mb-2 block">{prompt.icon}</span>
+                                <span className="text-sm text-text">{prompt.text}</span>
+                            </motion.button>
+                        ))}
+                    </motion.div>
+                </motion.div>
+            )}
+
             {/* Message Bubble Area */}
             <motion.div
                 ref={scrollContainerRef}
@@ -884,12 +1018,12 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                 {/* Only show text bubble if it's NOT a system message with an image */}
                                 {(!node.generatedImage || node.role === 'user') && (
                                     <motion.div
-                                        className={`text-text p-4 rounded-2xl ${node.role == "user"
+                                        className={`text-text p-4 rounded-2xl ${node.role?.toLowerCase() === "user"
                                             ? 'bg-secondary ml-auto w-fit max-w-[80%]'
                                             : 'mr-auto w-full'
                                             }`}
                                     >
-                                        {node.role === "user" ? (
+                                        {node.role?.toLowerCase() === "user" ? (
                                             <p className="text-text whitespace-pre-wrap">{node.content}</p>
                                         ) : (
                                             <MarkdownRenderer

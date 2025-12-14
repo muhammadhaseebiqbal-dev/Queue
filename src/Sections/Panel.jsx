@@ -25,12 +25,20 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                 const { projects, sessions } = response.data;
 
                 setProjects(projects);
-                // Map sessions to UI format
-                setChats(sessions.map(s => ({
-                    id: s._id,
-                    title: s.title,
-                    timestamp: new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                })));
+
+                // Deduplicate and Map sessions
+                const uniqueSessions = new Map();
+                sessions.forEach(s => {
+                    if (!uniqueSessions.has(s._id)) {
+                        uniqueSessions.set(s._id, {
+                            id: s._id,
+                            title: s.title,
+                            timestamp: new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        });
+                    }
+                });
+
+                setChats(Array.from(uniqueSessions.values()));
 
             } catch (error) {
                 console.error("Error fetching sidebar data:", error);
@@ -157,8 +165,8 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
             >
                 <div className="w-full h-full flex flex-col">
                     {/* Header */}
-                    <div className="p-4 border-b-2 border-border bg-secondary flex justify-between items-center">
-                        <h2 className="text-lg font-bold text-text">QueueBot</h2>
+                    <div className="p-4 bg-secondary flex justify-between items-center">
+                        <img src="/logo.svg" alt="QueueBot" className="h-8 w-auto" />
                         <button
                             onClick={() => setIsPanelExpanded(false)}
                             className="md:hidden p-2 text-textLight hover:text-text"
