@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Helmet } from 'react-helmet-async';
 import AiInput from "./components/ui/AiInput";
 import ChatArea from "./Sections/ChatArea";
 import Drawer from "./Sections/Panel";
@@ -33,6 +34,10 @@ function Workspace() {
 
     return (
         <div className="w-full h-screen flex overflow-hidden bg-primary">
+            <Helmet>
+                <title>QueueAI - AI Workspace</title>
+                <meta name="description" content="Chat with advanced AI models including Llama 3.3 and DeepMind for free. Your personal AI workspace for coding, writing, and analysis." />
+            </Helmet>
             <Drawer {...PanelInteractionVars} />
             <ChatArea {...PanelInteractionVars} />
         </div>

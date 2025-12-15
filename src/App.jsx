@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { HelmetProvider } from 'react-helmet-async';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -14,23 +15,25 @@ function App() {
 
   return (
     <GoogleOAuthProvider clientId={googleClientId}>
-      <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/signin" element={<SignIn />} />
-            <Route path="/verify-magic-link" element={<VerifyMagicLink />} />
-            <Route path="/email-sent" element={<EmailSent />} />
-            <Route path="/changelog" element={<Changelog />} />
+      <HelmetProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/signin" element={<SignIn />} />
+              <Route path="/verify-magic-link" element={<VerifyMagicLink />} />
+              <Route path="/email-sent" element={<EmailSent />} />
+              <Route path="/changelog" element={<Changelog />} />
 
-            <Route element={<ProtectedRoute />}>
-              <Route path="/app" element={<Workspace />} />
-            </Route>
+              <Route element={<ProtectedRoute />}>
+                <Route path="/app" element={<Workspace />} />
+              </Route>
 
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </HelmetProvider>
     </GoogleOAuthProvider>
   );
 }

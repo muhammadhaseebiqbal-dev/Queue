@@ -111,7 +111,7 @@ function Changelog() {
                         <span className="text-sm">Back to Home</span>
                     </Link>
                     <div className="flex items-center gap-2">
-                        <img src="/logo.svg" alt="QueueBot" className="h-8 w-8" />
+                        <img src="/logo.svg" alt="QueueAI" className="h-8 w-8" />
                         <span className="text-sm font-bold">Changelog</span>
                     </div>
                 </div>
@@ -145,7 +145,7 @@ function Changelog() {
                         transition={{ delay: 0.2 }}
                         className="text-lg text-zinc-400 max-w-2xl mx-auto"
                     >
-                        Track every feature, improvement, and fix we've shipped to make QueueBot better.
+                        Track every feature, improvement, and fix we've shipped to make QueueAI better.
                     </motion.p>
                 </div>
             </div>
@@ -174,6 +174,7 @@ function Changelog() {
                                         <div className="text-xs text-zinc-500 mb-1">{update.date}</div>
                                         <h3 className="text-xl font-bold text-white mb-1">{update.version}</h3>
                                         <p className="text-sm text-zinc-400">{update.title}</p>
+
                                     </div>
                                 </div>
 

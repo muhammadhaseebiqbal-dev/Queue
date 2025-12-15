@@ -828,7 +828,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     transition={{ type: "spring", stiffness: 200, damping: 20 }}
                     className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[200%] pointer-events-none"
                 >
-                    <img src="/logo.svg" alt="QueueBot" className="w-24 h-24 md:w-32 md:h-32 opacity-40" />
+                    <img src="/logo.svg" alt="QueueAI" className="w-24 h-24 md:w-32 md:h-32 opacity-40" />
                 </motion.div>
             )}
 

@@ -161,7 +161,7 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                 <div className="w-full h-full flex flex-col">
                     {/* Header */}
                     <div className="p-4 bg-secondary flex justify-between items-center">
-                        <img src="/logo.svg" alt="QueueBot" className="h-8 w-auto" />
+                        <img src="/logo.svg" alt="QueueAI" className="h-8 w-auto" />
                         <button
                             onClick={() => setIsPanelExpanded(false)}
                             className="md:hidden p-2 text-textLight hover:text-text"

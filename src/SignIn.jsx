@@ -73,7 +73,7 @@ function SignIn() {
                 >
                     <div className="mb-10">
                         <div className="w-12 h-12 flex items-center justify-center mb-6  p-2">
-                            <img src="/logo.svg" alt="QueueBot" className="w-full h-full" />
+                            <img src="/logo.svg" alt="QueueAI" className="h-8 w-auto" />
                         </div>
                         <h2 className="text-3xl font-bold text-white mb-2">Welcome Back</h2>
                         <p className="text-zinc-500">Sign in with Google or your email.</p>

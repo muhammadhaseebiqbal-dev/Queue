@@ -14,7 +14,7 @@ function LandingPage() {
             <div className="fixed top-6 left-0 right-0 z-50 flex justify-center px-6">
                 <nav className="w-full max-w-3xl bg-[#0A0A0A]/80 backdrop-blur-xl border border-white/10 rounded-full px-6 py-3 flex items-center justify-between shadow-2xl shadow-black/50">
                     <div className="flex items-center gap-2">
-                        <img src="/logo.svg" alt="QueueBot" className="h-8 w-8" />
+                        <img src="/logo.svg" alt="QueueAI" className="h-8 w-8" />
                     </div>
                     <div className="flex items-center gap-6">
                         {token ? (
@@ -217,7 +217,7 @@ function LandingPage() {
                                     <Zap size={24} />
                                 </div>
                                 <h3 className="text-2xl font-bold text-white mb-3">Voice Interaction</h3>
-                                <p className="text-zinc-400 mb-6">Speak naturally to QueueBot. Advanced speech-to-text captures your intent without typing.</p>
+                                <p className="text-zinc-400 mb-6">Speak naturally to QueueAI. Advanced speech-to-text captures your intent without typing.</p>
                                 <ul className="space-y-2 text-sm text-zinc-500">
                                     <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-orange-500 rounded-full" /> Whisper Turbo integration</li>
                                     <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-orange-500 rounded-full" /> Hands-free coding</li>
@@ -293,7 +293,7 @@ function LandingPage() {
                 <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="flex items-center gap-2">
                         <Sparkles size={16} className="text-zinc-500" />
-                        <span className="text-sm text-zinc-500">© 2025 QueueBot Inc.</span>
+                        <span className="text-sm text-zinc-500">© 2025 QueueAI Inc.</span>
                     </div>
                     <div className="flex flex-wrap gap-6">
                         <Link to="/changelog" className="text-sm text-zinc-500 hover:text-white transition-colors">Changelog</Link>
