@@ -1425,6 +1425,6 @@ app.get('/', (req, res) => {
     });
 });
 
-app.listen(process.env.PORT || 5000, '192.168.100.215', () => {
-    console.log(`Server running on http://localhost:${process.env.PORT}`);
+app.listen(process.env.PORT || 5000, '0.0.0.0', () => {
+    console.log(`Server running on http://0.0.0.0:${process.env.PORT || 5000}`);
 });
