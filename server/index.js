@@ -336,20 +336,36 @@ app.post('/context/save', async (req, res) => {
                 ? (firstUserMsg.content.substring(0, 50) + (firstUserMsg.content.length > 50 ? '...' : ''))
                 : 'New Conversation';
 
-            const newSession = await Session.create({
+            // DEDUPLICATION FIX:
+            // Check if a session was created by this user in the last 2 seconds with the same title
+            const twoSecondsAgo = new Date(Date.now() - 2000);
+            const existingRecentSession = await Session.findOne({
                 userId,
-                projectId: projectId || null,
                 title,
-                preview: title,
-                model: messages[0].model || 'gpt-oss-120b',
-                updatedAt: new Date()
+                createdAt: { $gte: twoSecondsAgo }
             });
-            activeSessionId = newSession._id;
-            isNewSession = true;
-            console.log(`[DB] Created new session: ${activeSessionId}`);
+
+            if (existingRecentSession) {
+                activeSessionId = existingRecentSession._id;
+                console.log(`[DB] Reusing recent session (Deduplication): ${activeSessionId}`);
+            } else {
+                const newSession = await Session.create({
+                    userId,
+                    projectId: projectId || null,
+                    title,
+                    preview: title,
+                    model: messages[0].model || 'gpt-oss-120b',
+                    createdAt: new Date(), // Explicitly set creation time
+                    updatedAt: new Date()
+                });
+                activeSessionId = newSession._id;
+                isNewSession = true;
+                console.log(`[DB] Created new session: ${activeSessionId}`);
+            }
         } else if (activeSessionId) {
             // Update timestamp
             await Session.findByIdAndUpdate(activeSessionId, { updatedAt: new Date() });
+            console.log(`[DB] Updated session: ${activeSessionId}`);
         }
 
         // 3. Sync Messages (Deduplication Logic)
@@ -670,8 +686,9 @@ app.get('/stream/:id', async (req, res) => {
                 }
             }
 
-            // Case A: Image -> Switch to Vision Model
-            if (payload.attachment.type.startsWith('image/')) {
+            // Case A: Image (Supported Vision Formats) -> Switch to Vision Model
+            const supportedImageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'image/gif'];
+            if (supportedImageTypes.includes(payload.attachment.type)) {
                 console.log("Attachment is Image - Switching to Vision Model (Llama-4 Maverick)");
                 modelKey = 'llama-4-maverick';
 

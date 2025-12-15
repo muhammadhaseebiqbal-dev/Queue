@@ -50,25 +50,20 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
         }
     }, [isPanelExpanded, PanelInteractionVars.sidebarRefreshKey]);
 
-    const handleNewChat = async () => {
+    const handleNewChat = () => {
         // Reset ChatArea state via parent
-        if (setIsPanelExpanded) { // Just checking prop existence
-            // Call parent setter if available (passed via rest props)
-            if (PanelInteractionVars.setActiveSessionId) {
-                PanelInteractionVars.setActiveSessionId(null);
-            }
-            // Clear active project for standard chats
-            if (PanelInteractionVars.setActiveProject) {
-                PanelInteractionVars.setActiveProject(null);
-            }
+        if (PanelInteractionVars.setActiveSessionId) {
+            PanelInteractionVars.setActiveSessionId(null);
         }
-        // Tell backend to reset context for this user
-        // We need userId here. It's stored in ChatArea but not Panel? 
-        // We typically store userId in localStorage or retrieve from context.
-        // For now, let's assume valid userId logic is handled in ChatArea's effect or we pass it down.
-        // Wait, Panel doesn't know userId directly unless we look at localStorage of ChatArea...
-        // Actually, easiest way: ChatArea listens to activeSessionId change, right? 
-        // Let ChatArea call the API because it owns the `userId` state.
+        // Clear active project for standard chats
+        if (PanelInteractionVars.setActiveProject) {
+            PanelInteractionVars.setActiveProject(null);
+        }
+
+        // Close panel on mobile for better UX
+        if (window.innerWidth < 768 && setIsPanelExpanded) {
+            setIsPanelExpanded(false);
+        }
     }
 
     // Project creation state

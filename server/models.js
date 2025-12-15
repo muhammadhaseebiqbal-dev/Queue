@@ -66,7 +66,7 @@ const sessionSchema = new mongoose.Schema({
 const messageSchema = new mongoose.Schema({
     sessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Session', required: true, index: true },
     role: { type: String, required: true, enum: ['user', 'assistant', 'system'] },
-    content: { type: String, required: true },
+    content: { type: mongoose.Schema.Types.Mixed, required: true },
     // Metadata for rich features
     type: { type: String, default: 'text' }, // 'text', 'image_generated'
     generatedImage: {
