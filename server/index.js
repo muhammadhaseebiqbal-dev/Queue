@@ -174,7 +174,7 @@ const MAX_CONTEXT_TOKENS = 4000;
 const CONTEXT_WARNING_THRESHOLD = 3000;
 
 // Cloudinary Helper (Dynamic Import)
-async function uploadToCloudinary(base64OrUrl) {
+async function uploadToCloudinary(base64OrUrl, options = {}) {
     // Check if configuration exists
     if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY) {
         return null;
@@ -191,7 +191,7 @@ async function uploadToCloudinary(base64OrUrl) {
         console.log('[Cloudinary] Uploading image...');
         const result = await cloudinary.v2.uploader.upload(base64OrUrl, {
             folder: 'queuebot_uploads',
-            resource_type: 'auto'
+            resource_type: options.resource_type || 'auto'
         });
         console.log(`[Cloudinary] Upload success: ${result.secure_url}`);
         return result.secure_url;
@@ -649,7 +649,14 @@ app.get('/stream/:id', async (req, res) => {
             let originalBase64 = null;
             if (payload.attachment.content) {
                 originalBase64 = payload.attachment.content; // Store original for parsing
-                const secureUrl = await uploadToCloudinary(payload.attachment.content);
+
+                // Determine resource type based on mime type
+                const isImage = payload.attachment.type.startsWith('image/');
+                const options = {
+                    resource_type: isImage ? 'image' : 'auto'
+                };
+
+                const secureUrl = await uploadToCloudinary(payload.attachment.content, options);
                 if (secureUrl) {
                     payload.attachment.content = secureUrl;
                     console.log('[Attachment] Replaced Base64 with Cloudinary URL');

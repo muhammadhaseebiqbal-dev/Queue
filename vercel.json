@@ -23,6 +23,10 @@
         {
             "source": "/models",
             "destination": "http://13.62.57.106:5000/models"
+        },
+        {
+            "source": "/(.*)",
+            "destination": "/index.html"
         }
     ]
 }
