@@ -1417,7 +1417,7 @@ app.get('/', (req, res) => {
         status: true,
         data: {
             name: 'QueueBot',
-            version: '1.2.0',
+            version: '2.5.0',
             description: 'Standard api for my queuebot project',
             license: 'ISC',
             author: 'Haseeb Iqbal',
