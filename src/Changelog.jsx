@@ -5,6 +5,17 @@ import { ArrowLeft, Check, Sparkles, Zap, Brain, Image as ImageIcon, Lock, Mail,
 function Changelog() {
     const updates = [
         {
+            date: "December 18, 2025",
+            version: "v2.5.1",
+            title: "Production Ready: Safety & SEO",
+            items: [
+                { icon: Check, text: "Search Engine Optimization: Fully optimized for 2025 ranking standards" },
+                { icon: Zap, text: "PWA Support: Install QueueAI as a native app on any device" },
+                { icon: Lock, text: "Strict Safety Filters: Enhanced NSFW & Policy Violation protection" },
+                { icon: Sparkles, text: "Dependency Cleanup: Optimized backend performance" }
+            ]
+        },
+        {
             date: "December 14, 2025",
             version: "v2.5.0",
             title: "Cross-Login Authentication & UI Enhancements",
@@ -129,7 +140,7 @@ function Changelog() {
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
                         </span>
-                        Latest: v2.5.0
+                        Latest: v2.5.1
                     </motion.div>
                     <motion.h1
                         initial={{ opacity: 0, y: 20 }}

@@ -412,13 +412,9 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                         onClick={toggleChatStatus}
                         disabled={!isChatStarted && !promptInput && !attachment || isStreaming}
                         className={`w-11 h-11 rounded-2xl flex justify-center items-center transition-all ${isChatStarted || promptInput || attachment ? 'bg-white text-black' : 'bg-tertiary text-textLight cursor-not-allowed'
-                            } ${isStreaming ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            } ${isStreaming ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
                     >
-                        {isStreaming ? (
-                            <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                        ) : (
-                            <Send size={20} />
-                        )}
+                        <Send size={20} />
                     </button>
                 </div>
             </div>

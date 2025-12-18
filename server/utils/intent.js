@@ -23,6 +23,21 @@ export async function detectSearchIntent(queryOrMessages) {
         lastQuery = queryOrMessages;
     }
 
+    // 0. IMMEDIATE SAFETY KEYWORD CHECK (Fail-Fast)
+    const UNSAFE_KEYWORDS = [
+        /\bnude\b/i, /\bnaked\b/i, /\bsex\b/i, /\bporn\b/i, /\bnsfw\b/i,
+        /\bcensored\b/i, /\bdick\b/i, /\bvagina\b/i, /\bpussy\b/i, /\bpenis\b/i,
+        /\bboobs\b/i, /\bbreast\b/i, /\btits\b/i, /\bundressed\b/i, /\btoppless\b/i,
+        /\bess\b/i, /\berotic\b/i, /\bkink\b/i, /\bfetish\b/i, /\bbikini\b/i,
+        /\bswimsuit\b/i, /\blingerie\b/i, /\bunderwear\b/i, /\bpanty\b/i,
+        /\bbra\b/i, /\bthong\b/i
+    ];
+
+    if (UNSAFE_KEYWORDS.some(regex => regex.test(lastQuery))) {
+        console.log(`[Intent] Safety Violation Detected via Regex: "${lastQuery}"`);
+        return { category: "SAFETY_VIOLATION" };
+    }
+
     try {
         const completion = await groq.chat.completions.create({
             messages: [
@@ -33,7 +48,8 @@ export async function detectSearchIntent(queryOrMessages) {
                     1. "WEATHER": The user is asking for current weather, forecast, or temperature for a specific location. EXTRACT THE LOCATION.
                     2. "IMAGE": The user wants to generate, create, draw, or paint an image. EXTRACT THE IMAGE PROMPT (detailed description).
                     3. "SEARCH": The query requires real-time information from the web (news, stocks, sports, recent events), BUT IS NOT WEATHER or IMAGE.
-                    4. "NO": The query can be answered by general knowledge or is a coding/creative task.
+                    4. "SAFETY_VIOLATION": The query violates safety policies (NSFW, sexual, explicit violence, illegal acts).
+                    5. "NO": The query can be answered by general knowledge or is a coding/creative task.
 
                     IMPORTANT: Use the provided CONVERSATION HISTORY to understand context.
                     - If the user says "make it angry", look at previous messages to find what "it" refers to (e.g., a cat) and create a full prompt: "An angry cat".
@@ -41,7 +57,7 @@ export async function detectSearchIntent(queryOrMessages) {
                     - **CRITICAL**: If the user asks a NEW question unrelated to the previous topic (e.g., switch from Weather to Search, or Image to Code), IGNORE the history and classify based on the new query.
                     - "Google Antigravity" after "Weather" is a SEARCH, not Weather.
 
-                    Return ONLY a JSON object: { "category": "WEATHER" | "SEARCH" | "IMAGE" | "NO", "location": "City Name" (only for WEATHER), "image_prompt": "Detailed description" (only for IMAGE) }
+                    Return ONLY a JSON object: { "category": "WEATHER" | "SEARCH" | "IMAGE" | "SAFETY_VIOLATION" | "NO", "location": "City Name" (only for WEATHER), "image_prompt": "Detailed description" (only for IMAGE) }
 
                     Examples:
                     "What's the weather in Tokyo?" -> { "category": "WEATHER", "location": "Tokyo" }
@@ -54,7 +70,9 @@ export async function detectSearchIntent(queryOrMessages) {
                     "Who won the Super Bowl 2024?" -> { "category": "SEARCH" }
                     "Latest AI news" -> { "category": "SEARCH" }
                     "Write a loop in Python" -> { "category": "NO" }
-                    "Capital of France" -> { "category": "NO" }`
+                    "Capital of France" -> { "category": "NO" }
+                    "Generate a nude image" -> { "category": "SAFETY_VIOLATION" }
+                    "Show me explicit content" -> { "category": "SAFETY_VIOLATION" }`
                 },
                 {
                     role: "user",

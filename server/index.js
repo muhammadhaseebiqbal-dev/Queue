@@ -1,12 +1,47 @@
 import express from "express";
 import dotenv from "dotenv";
 import { Groq } from 'groq-sdk';
-import { GoogleGenAI } from '@google/genai';
 import cors from 'cors';
+import { v2 as cloudinary } from 'cloudinary';
+import axios from 'axios';
+import { detectSearchIntent } from './utils/intent.js';
 
 dotenv.config();
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+async function generateImage(prompt) {
+    try {
+        if (!process.env.FAL_KEY) throw new Error("FAL_KEY missing");
+
+        console.log('[Image] Generating:', prompt);
+        const response = await axios.post('https://fal.run/fal-ai/flux-pro/v1.1', {
+            prompt: prompt,
+            image_size: "landscape_4_3",
+            safety_tolerance: "2" // Keep strict tolerance on Fal side too
+        }, {
+            headers: { 'Authorization': `Key ${process.env.FAL_KEY}`, 'Content-Type': 'application/json' }
+        });
+
+        const imageUrl = response.data.images[0].url;
+        console.log('[Image] Generated URL:', imageUrl);
+
+        // Upload to Cloudinary
+        const uploadResult = await cloudinary.uploader.upload(imageUrl, {
+            folder: 'queuebot_generated'
+        });
+
+        return uploadResult.secure_url;
+    } catch (error) {
+        console.error('[Image] Error:', error.response?.data || error.message);
+        throw error;
+    }
+}
 
 const app = express()
 app.use(cors());
@@ -162,10 +197,6 @@ const MODEL_CONFIGS = {
         temperature: 0.6,
         max_completion_tokens: 4096,
         top_p: 1
-    },
-    'gemini-3': {
-        model: 'gemini-3-pro-preview',
-        provider: 'gemini'
     }
 };
 
@@ -236,6 +267,51 @@ app.get('/stream/:id', async (req, res) => {
             }
         ];
 
+        // 1. Detect Intent (Safety & Features)
+        const intent = await detectSearchIntent(messages);
+
+        // 2. Handle Safety Violation
+        if (intent.category === 'SAFETY_VIOLATION') {
+            res.write(`data: ${JSON.stringify({ content: "SAFETY_VIOLATION_DETECTED" })}\n\n`);
+            res.end();
+            return;
+        }
+
+        // 3. Handle Image Generation
+        if (intent.category === 'IMAGE') {
+            try {
+                // Secondary Regex Check on the generated prompt itself
+                const UNSAFE_REGEX = /\b(nude|naked|sex|porn|nsfw|dick|vagina|pussy|penis|boobs|breast|tits|undressed|topless|erotic|kink|fetish|bikini|swimsuit|lingerie|underwear|panty|bra|thong)\b/i;
+                if (UNSAFE_REGEX.test(intent.image_prompt)) {
+                    console.log(`[Safety] Blocked UNSAFE PROMPT: ${intent.image_prompt}`);
+                    res.write(`data: ${JSON.stringify({ content: "SAFETY_VIOLATION_DETECTED" })}\n\n`);
+                    res.end();
+                    return;
+                }
+
+                res.write(`data: ${JSON.stringify({ content: "🎨 Generating image..." })}\n\n`);
+
+                // Use intent.image_prompt from the classifier
+                const imageUrl = await generateImage(intent.image_prompt);
+
+                // Send special image event
+                res.write(`data: ${JSON.stringify({
+                    type: 'image',
+                    url: imageUrl,
+                    prompt: intent.image_prompt
+                })}\n\n`);
+
+                res.write(`data: ${JSON.stringify({ content: `\n\n![Generated Image](${imageUrl})` })}\n\n`);
+                res.end();
+                return;
+            } catch (error) {
+                console.error("Image Gen Error:", error);
+                res.write(`data: ${JSON.stringify({ content: "Error generating image. Please try again." })}\n\n`);
+                res.end();
+                return;
+            }
+        }
+
         // Clean messages: remove frontend-only properties like 'streaming', 'model', etc.
         const cleanedMessages = messages
             .filter(msg => msg.role !== 'separator') // Remove separator messages
@@ -260,47 +336,22 @@ app.get('/stream/:id', async (req, res) => {
         const modelKey = payload.model || 'llama-3.3-70b';
         const config = MODEL_CONFIGS[modelKey] || MODEL_CONFIGS['llama-3.3-70b'];
 
-        // Check if this is a Gemini model
-        if (config.provider === 'gemini') {
-            // Build conversation string from messages
-            const conversationText = finalMessages
-                .map(msg => {
-                    if (msg.role === 'system') return `System: ${msg.content}`;
-                    if (msg.role === 'user') return `User: ${msg.content}`;
-                    return `Assistant: ${msg.content}`;
-                })
-                .join('\n\n');
+        // Use Groq for all models (Gemini removed)
+        const chatCompletion = await groq.chat.completions.create({
+            messages: finalMessages,
+            model: config.model,
+            temperature: config.temperature,
+            max_completion_tokens: config.max_completion_tokens,
+            top_p: config.top_p,
+            stream: true,
+            stop: null,
+            ...(config.reasoning_effort && { reasoning_effort: config.reasoning_effort })
+        });
 
-            // Use the simple Gemini 3 API format
-            const response = await gemini.models.generateContentStream({
-                model: config.model,
-                contents: conversationText
-            });
-
-            for await (const chunk of response) {
-                const content = chunk.text || '';
-                if (content) {
-                    res.write(`data: ${JSON.stringify({ content })}\n\n`);
-                }
-            }
-        } else {
-            // Use Groq for other models
-            const chatCompletion = await groq.chat.completions.create({
-                messages: finalMessages,
-                model: config.model,
-                temperature: config.temperature,
-                max_completion_tokens: config.max_completion_tokens,
-                top_p: config.top_p,
-                stream: true,
-                stop: null,
-                ...(config.reasoning_effort && { reasoning_effort: config.reasoning_effort })
-            });
-
-            for await (const chunk of chatCompletion) {
-                const content = chunk.choices[0]?.delta?.content || '';
-                if (content) {
-                    res.write(`data: ${JSON.stringify({ content })}\n\n`);
-                }
+        for await (const chunk of chatCompletion) {
+            const content = chunk.choices[0]?.delta?.content || '';
+            if (content) {
+                res.write(`data: ${JSON.stringify({ content })}\n\n`);
             }
         }
 
@@ -504,6 +555,21 @@ Provide the final answer incorporating the best insights.`;
         delete deepMindSessions[sessionId];
     }
 });
+
+app.get('/', (req, res) => {
+    res.json({
+        message: "Welcome to the QueueBot API",
+        status: true,
+        data: {
+            name: "QueueBot",
+            version: "2.5.1",
+            description: "Standard api for my queuebot project",
+            license: "ISC",
+            author: "Haseeb Iqbal"
+        }
+    });
+});
+
 
 app.listen(process.env.PORT || 5000, () => {
     console.log(`Server running on http://localhost:${process.env.PORT}`);

@@ -9,6 +9,7 @@ import SignIn from "./SignIn";
 import VerifyMagicLink from "./VerifyMagicLink";
 import EmailSent from "./EmailSent";
 import Changelog from "./Changelog";
+import BlogPost from "./BlogPost";
 
 function App() {
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_CLIENT_ID";
@@ -24,6 +25,7 @@ function App() {
               <Route path="/verify-magic-link" element={<VerifyMagicLink />} />
               <Route path="/email-sent" element={<EmailSent />} />
               <Route path="/changelog" element={<Changelog />} />
+              <Route path="/blog/:slug" element={<BlogPost />} />
 
               <Route element={<ProtectedRoute />}>
                 <Route path="/app" element={<Workspace />} />

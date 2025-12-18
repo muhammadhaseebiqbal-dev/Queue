@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Sparkles, Zap, Brain, MessageSquare, Layers, Command } from "lucide-react";
+import { Helmet } from "react-helmet-async";
 import { useAuth } from "./context/AuthContext";
 
 function LandingPage() {
@@ -16,7 +17,58 @@ function LandingPage() {
     }, [token, navigate]);
 
     return (
-        <div className="min-h-screen bg-[#0A0A0A] text-white selection:bg-indigo-500/30 overflow-x-hidden font-sans">
+        <div className="min-h-screen bg-[#0A0A0A] text-white selection:bg-indigo-500/30 font-sans">
+            <Helmet>
+                <title>Free AI Workspace for Students & Developers | QueueAI</title>
+                <meta name="description" content="Access Llama 3.3 70B, Qwen 2.5, and other top AI models for free. The ultimate AI workspace for coding, research, and productivity without API fees." />
+                <link rel="canonical" href="https://queueai.app/" />
+
+                {/* Open Graph / Social Sharing */}
+                <meta property="og:type" content="website" />
+                <meta property="og:url" content="https://queueai.app/" />
+                <meta property="og:title" content="Free AI Workspace for Students & Developers | QueueAI" />
+                <meta property="og:description" content="Stop paying for AI. Use Llama 3.3 and Qwen 2.5 for free in a beautiful, persistent workspace." />
+                <meta property="og:image" content="https://queueai.app/pwa-512x512.png" />
+
+                {/* Twitter */}
+                <meta name="twitter:card" content="summary_large_image" />
+                <meta name="twitter:url" content="https://queueai.app/" />
+                <meta name="twitter:title" content="Free AI Workspace | QueueAI" />
+                <meta name="twitter:description" content="Use Llama 3.3 and Qwen 2.5 for free." />
+                <meta name="twitter:image" content="https://queueai.app/pwa-512x512.png" />
+
+                {/* FAQ Schema for Voice Search */}
+                <script type="application/ld+json">
+                    {`
+                    {
+                      "@context": "https://schema.org",
+                      "@type": "FAQPage",
+                      "mainEntity": [{
+                        "@type": "Question",
+                        "name": "Is QueueAI really free?",
+                        "acceptedAnswer": {
+                          "@type": "Answer",
+                          "text": "Yes, QueueAI provides free access to open-source models like Llama 3.3 70B and Qwen 2.5 thanks to efficient API routing."
+                        }
+                      }, {
+                        "@type": "Question",
+                        "name": "Can I use Llama 3.3 for coding?",
+                        "acceptedAnswer": {
+                          "@type": "Answer",
+                          "text": "Absolutely. Llama 3.3 70B is excellent for Python, JavaScript, and React coding tasks, offering performance comparable to GPT-4."
+                        }
+                      }, {
+                        "@type": "Question",
+                        "name": "Does QueueAI store my data?",
+                        "acceptedAnswer": {
+                          "@type": "Answer",
+                          "text": "QueueAI is privacy-focused. Your code and chats are stored locally or encrypted in your private workspace, never used for model training."
+                        }
+                      }]
+                    }
+                    `}
+                </script>
+            </Helmet>
 
             {/* Floating Navbar (Mobbin Style) */}
             <div className="fixed top-6 left-0 right-0 z-50 flex justify-center px-6">
@@ -45,7 +97,7 @@ function LandingPage() {
             </div>
 
             {/* Hero Section */}
-            <section className="relative pt-40 pb-20 px-6">
+            <section className="relative min-h-screen flex flex-col items-center justify-center pt-32 pb-20 px-6">
                 {/* Background Glow - Neutral */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-white/5 blur-[120px] rounded-full pointer-events-none" />
 
@@ -63,7 +115,7 @@ function LandingPage() {
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
                             </span>
-                            v2.5.0 Now Available with Cross-Platform Auth
+                            v2.5.1 Now Available with PWA & SEO
                         </motion.div>
                     </Link>
 
@@ -73,9 +125,9 @@ function LandingPage() {
                         transition={{ duration: 0.5, delay: 0.1 }}
                         className="text-5xl md:text-7xl font-bold tracking-tight mb-8"
                     >
-                        The Ultimate <br />
+                        Free AI Workspace for<br />
                         <span className="text-zinc-500">
-                            AI Workspace
+                            Students & Developers
                         </span>
                     </motion.h1>
 
@@ -136,7 +188,7 @@ function LandingPage() {
             </section>
 
             {/* SECTION 3: Persistent Workspace */}
-            <section className="py-24 px-6 relative">
+            <section className="h-screen sticky top-0 z-0 px-6 flex flex-col justify-center bg-[#0A0A0A] border-t border-white/5">
                 <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-16 items-center">
                     <div>
                         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-medium mb-6">
@@ -187,7 +239,7 @@ function LandingPage() {
             </section>
 
             {/* SECTION 4: Vision & Voice */}
-            <section className="py-24 px-6 bg-white/[0.02]">
+            <section className="min-h-screen relative z-10 flex flex-col justify-center py-24 px-6 bg-[#0A0A0A] border-t border-white/5 shadow-[0_-20px_60px_rgba(0,0,0,0.8)]">
                 <div className="max-w-6xl mx-auto">
                     <div className="text-center mb-16">
                         <h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">See. Speak. Create.</h2>
@@ -236,8 +288,52 @@ function LandingPage() {
                 </div>
             </section>
 
+            {/* SECTION 4.5: Use Cases & Blog (SEO) */}
+            <section className="relative z-20 py-24 px-6 bg-[#0A0A0A] border-t border-white/5 shadow-[0_-20px_60px_rgba(0,0,0,0.8)]">
+                <div className="max-w-6xl mx-auto">
+                    <div className="text-center mb-16">
+                        <h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">Unlock Your Potential</h2>
+                        <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
+                            Discover how students and professionals use QueueAI to accelerate their workflow.
+                        </p>
+                    </div>
+
+                    <div className="grid md:grid-cols-3 gap-6">
+                        {/* Article 1 */}
+                        <Link to="/blog/how-to-use-llama-3-3-free" className="bg-zinc-900 border border-white/10 rounded-3xl p-8 hover:border-indigo-500/50 transition-colors cursor-pointer group flex flex-col">
+                            <div className="text-xs font-mono text-indigo-400 mb-4 uppercase tracking-wider">Guide</div>
+                            <h3 className="text-xl font-bold text-white mb-3 group-hover:text-indigo-400 transition-colors">How to use Llama 3.3 for Free</h3>
+                            <p className="text-zinc-400 text-sm leading-relaxed mb-6 flex-grow">
+                                Stop paying for expensive API credits. Learn how QueueAI provides free access to Meta's state-of-the-art Llama 3.3 70B model for research and coding.
+                            </p>
+                            <div className="text-white text-sm font-medium flex items-center gap-2 mt-auto">Read Guide <ArrowRight size={14} /></div>
+                        </Link>
+
+                        {/* Article 2 */}
+                        <Link to="/blog/best-ai-coding-assistance-2025" className="bg-zinc-900 border border-white/10 rounded-3xl p-8 hover:border-indigo-500/50 transition-colors cursor-pointer group flex flex-col">
+                            <div className="text-xs font-mono text-indigo-400 mb-4 uppercase tracking-wider">Use Case</div>
+                            <h3 className="text-xl font-bold text-white mb-3 group-hover:text-indigo-400 transition-colors">Best AI for Coding Assistance 2025</h3>
+                            <p className="text-zinc-400 text-sm leading-relaxed mb-6 flex-grow">
+                                Compare Qwen 2.5 vs GPT-4o. Why developers are switching to open-source models for better privacy and unlimited context windows.
+                            </p>
+                            <div className="text-white text-sm font-medium flex items-center gap-2 mt-auto">Read Analysis <ArrowRight size={14} /></div>
+                        </Link>
+
+                        {/* Article 3 */}
+                        <Link to="/blog/free-ai-workspace-students" className="bg-zinc-900 border border-white/10 rounded-3xl p-8 hover:border-indigo-500/50 transition-colors cursor-pointer group flex flex-col">
+                            <div className="text-xs font-mono text-indigo-400 mb-4 uppercase tracking-wider">Education</div>
+                            <h3 className="text-xl font-bold text-white mb-3 group-hover:text-indigo-400 transition-colors">Free AI Workspace for Students</h3>
+                            <p className="text-zinc-400 text-sm leading-relaxed mb-6 flex-grow">
+                                A complete guide to organizing your thesis, generating study notes, and visualizing data with QueueAI's multi-model interface.
+                            </p>
+                            <div className="text-white text-sm font-medium flex items-center gap-2 mt-auto">Read Guide <ArrowRight size={14} /></div>
+                        </Link>
+                    </div>
+                </div>
+            </section>
+
             {/* SECTION 5: Smart Features */}
-            <section className="py-24 px-6 border-b border-white/5">
+            <section className="relative z-30 py-24 px-6 bg-[#0A0A0A] border-b border-white/5 shadow-[0_-20px_60px_rgba(0,0,0,0.8)]">
                 <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-8 text-center">
                     <div className="p-6">
                         <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-400">
@@ -264,7 +360,7 @@ function LandingPage() {
             </section>
 
             {/* Model Ecosystem */}
-            <section className="py-20 px-6 bg-zinc-900/20 border-y border-white/5">
+            <section className="relative z-30 py-20 px-6 bg-[#0A0A0A] border-y border-white/5">
                 <div className="max-w-6xl mx-auto">
                     <div className="text-center mb-12">
                         <h2 className="text-2xl md:text-3xl font-semibold text-white mb-2">Powered by Frontier Models</h2>
@@ -281,7 +377,7 @@ function LandingPage() {
             </section>
 
             {/* Privacy / Security Support */}
-            <section className="py-20 px-6">
+            <section className="relative z-30 py-20 px-6 bg-[#0A0A0A]">
                 <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-8">
                     {[
                         { title: "Zero Retention", desc: "Your code is never stored or used for model training." },
@@ -297,7 +393,7 @@ function LandingPage() {
             </section>
 
             {/* Footer */}
-            <footer className="border-t border-white/5 py-12 bg-[#0A0A0A]">
+            <footer className="relative z-30 border-t border-white/5 py-12 bg-[#0A0A0A]">
                 <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="flex items-center gap-2">
                         <Sparkles size={16} className="text-zinc-500" />
