@@ -1,4 +1,4 @@
-import { Copy, Sparkles, Image as ImageIcon, FileText, PanelRightOpen, X, ThumbsUp, ThumbsDown, Check, Bot, Rocket, Mountain, Moon, ChevronDown } from "lucide-react";
+import { Copy, Sparkles, Image as ImageIcon, FileText, PanelRightOpen, X, ThumbsUp, ThumbsDown, Check, Bot, Rocket, Mountain, Moon, ChevronDown, ShieldAlert } from "lucide-react";
 import AiInput from "../components/ui/AiInput"
 import MarkdownRenderer from "../components/ui/MarkdownRenderer";
 import DeepMindProgress from "../components/ui/DeepMindProgress"
@@ -962,67 +962,80 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                 }
 
                                 {/* Only show text bubble if it's NOT a system message with an image */}
-                                {(!node.generatedImage || node.role === 'user') && (
-                                    <motion.div
-                                        className={`text-text p-4 rounded-2xl ${node.role?.toLowerCase() === "user"
-                                            ? 'bg-secondary ml-auto w-fit max-w-[80%]'
-                                            : 'mr-auto w-full'
-                                            }`}
-                                    >
-                                        {node.role?.toLowerCase() === "user" ? (
-                                            <p className="text-text whitespace-pre-wrap">{node.content}</p>
-                                        ) : (
-                                            <MarkdownRenderer
-                                                content={node.content}
-                                                streaming={node.streaming}
-                                                sources={node.searchSources}
-                                            />
-                                        )}
-
-                                        {/* Response Actions (Like, Dislike, Copy) for Assistant ONLY */}
-                                        {node.role === 'assistant' && !node.streaming && (
-                                            <div className="flex items-center gap-2 mt-3 px-1">
-                                                <motion.button
-                                                    whileTap={{ scale: 0.8 }}
-                                                    transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                                                    onClick={() => handleFeedback(index, 'like')}
-                                                    className={`p-1.5 rounded-lg transition-colors ${node.feedback === 'like' ? 'text-green-400 bg-white/10' : 'text-textLight hover:text-white hover:bg-white/10'}`}
-                                                    title="Like"
-                                                >
-                                                    <ThumbsUp size={14} fill={node.feedback === 'like' ? "currentColor" : "none"} />
-                                                </motion.button>
-                                                <motion.button
-                                                    whileTap={{ scale: 0.8 }}
-                                                    transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                                                    onClick={() => handleFeedback(index, 'dislike')}
-                                                    className={`p-1.5 rounded-lg transition-colors ${node.feedback === 'dislike' ? 'text-red-400 bg-white/10' : 'text-textLight hover:text-white hover:bg-white/10'}`}
-                                                    title="Dislike"
-                                                >
-                                                    <ThumbsDown size={14} fill={node.feedback === 'dislike' ? "currentColor" : "none"} />
-                                                </motion.button>
-                                                <div className="ml-auto flex items-center">
-                                                    {copiedIndex === index && <span className="text-xs text-green-400 mr-2 animate-fade-in">Copied!</span>}
-                                                    <button
-                                                        className="p-1.5 text-textLight hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                                                        onClick={() => handleCopy(node.content, index)}
-                                                        title="Copy to clipboard"
-                                                    >
-                                                        {copiedIndex === index ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </motion.div>
+                                {node.role === 'assistant' && typeof node.content === 'string' && node.content.includes("SAFETY_VIOLATION_DETECTED") ? (
+                                    <div className="border border-red-500/50 bg-red-500/10 rounded-2xl p-4 mr-auto w-full max-w-2xl">
+                                        <div className="flex items-center gap-3 mb-2 text-red-500 font-bold">
+                                            <ShieldAlert size={20} />
+                                            <span>Safety Policy Violation</span>
+                                        </div>
+                                        <p className="text-red-400 text-sm">
+                                            {node.content.replace("SAFETY_VIOLATION_DETECTED", "").trim() || "Examples of unsafe content are strictly prohibited."}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    (!node.generatedImage || node.role === 'user') && (
+                                        <motion.div
+                                            className={`text-text p-4 rounded-2xl ${node.role?.toLowerCase() === "user"
+                                                ? 'bg-secondary ml-auto w-fit max-w-[80%]'
+                                                : 'mr-auto w-full'
+                                                }`}
+                                        >
+                                            {node.role?.toLowerCase() === "user" ? (
+                                                <p className="text-text whitespace-pre-wrap">{node.content}</p>
+                                            ) : (
+                                                <>
+                                                    <MarkdownRenderer
+                                                        content={node.content}
+                                                        streaming={node.streaming}
+                                                        sources={node.searchSources}
+                                                    />
+                                                    {/* Response Actions (Like, Dislike, Copy) for Assistant ONLY */}
+                                                    {!node.streaming && (
+                                                        <div className="flex items-center gap-2 mt-3 px-1">
+                                                            <motion.button
+                                                                whileTap={{ scale: 0.8 }}
+                                                                transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                                                                onClick={() => handleFeedback(index, 'like')}
+                                                                className={`p-1.5 rounded-lg transition-colors ${node.feedback === 'like' ? 'text-green-400 bg-white/10' : 'text-textLight hover:text-white hover:bg-white/10'}`}
+                                                                title="Like"
+                                                            >
+                                                                <ThumbsUp size={14} fill={node.feedback === 'like' ? "currentColor" : "none"} />
+                                                            </motion.button>
+                                                            <motion.button
+                                                                whileTap={{ scale: 0.8 }}
+                                                                transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                                                                onClick={() => handleFeedback(index, 'dislike')}
+                                                                className={`p-1.5 rounded-lg transition-colors ${node.feedback === 'dislike' ? 'text-red-400 bg-white/10' : 'text-textLight hover:text-white hover:bg-white/10'}`}
+                                                                title="Dislike"
+                                                            >
+                                                                <ThumbsDown size={14} fill={node.feedback === 'dislike' ? "currentColor" : "none"} />
+                                                            </motion.button>
+                                                            <div className="ml-auto flex items-center">
+                                                                {copiedIndex === index && <span className="text-xs text-green-400 mr-2 animate-fade-in">Copied!</span>}
+                                                                <button
+                                                                    className="p-1.5 text-textLight hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                                                                    onClick={() => handleCopy(node.content, index)}
+                                                                    title="Copy to clipboard"
+                                                                >
+                                                                    {copiedIndex === index ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            )}
+                                        </motion.div>
+                                    )
                                 )}
                             </div>
                         )
                     })
                 }
                 <div ref={messagesEndRef} />
-            </motion.div>
+            </motion.div >
 
             {/* Input Area */}
-            <motion.div
+            < motion.div
                 layout
                 className="w-full flex justify-center items-center pb-6 pt-2 shrink-0 z-10"
             >
@@ -1043,10 +1056,10 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     setAttachment={setAttachment}
                     activeProject={PanelInteractionVars?.activeProject}
                 />
-            </motion.div>
+            </motion.div >
 
             {/* Image Modal Lightbox */}
-            <AnimatePresence>
+            < AnimatePresence >
                 {previewImage && (
                     <motion.div
                         initial={{ opacity: 0 }}
@@ -1072,7 +1085,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                         </button>
                     </motion.div>
                 )}
-            </AnimatePresence>
+            </AnimatePresence >
 
         </motion.div >
     )

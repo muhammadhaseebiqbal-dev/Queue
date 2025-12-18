@@ -5,7 +5,7 @@ import axios from "axios"
 
 import { API_URL } from "../../config"
 
-function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, toggleDeepMind, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment, activeProject, handleSend }) {
+function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, toggleDeepMind, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment, activeProject, handleSend, isStreaming }) {
 
     const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
     const dropdownRef = useRef(null)
@@ -224,8 +224,9 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                 value={promptInput}
                 onChange={handlepromptInput}
                 onKeyDown={handleKeyDown}
-                className="h-14 text-text placeholder:text-textLight outline-none px-4 bg-transparent"
-                placeholder={attachment ? "Type a message to send with your file..." : "Ask Anything"}
+                disabled={isStreaming}
+                className={`h-14 text-text placeholder:text-textLight outline-none px-4 bg-transparent ${isStreaming ? 'cursor-not-allowed opacity-50' : ''}`}
+                placeholder={isStreaming ? "QueueAI is thinking..." : (attachment ? "Type a message to send with your file..." : "Ask Anything")}
             />
             <div className="w-full bg-primary flex p-1 justify-between rounded-2xl border-2 border-borderLight">
                 <div className="flex gap-1">
@@ -409,10 +410,15 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                     )}
                     <button
                         onClick={toggleChatStatus}
+                        disabled={!isChatStarted && !promptInput && !attachment || isStreaming}
                         className={`w-11 h-11 rounded-2xl flex justify-center items-center transition-all ${isChatStarted || promptInput || attachment ? 'bg-white text-black' : 'bg-tertiary text-textLight cursor-not-allowed'
-                            }`}
+                            } ${isStreaming ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                        <Send size={20} />
+                        {isStreaming ? (
+                            <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                        ) : (
+                            <Send size={20} />
+                        )}
                     </button>
                 </div>
             </div>

@@ -1,11 +1,19 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Sparkles, Zap, Brain, MessageSquare, Layers, Command } from "lucide-react";
 import { useAuth } from "./context/AuthContext";
 
 function LandingPage() {
     const { token } = useAuth();
+    const navigate = useNavigate();
     const destination = token ? "/app" : "/signin";
+
+    useEffect(() => {
+        if (token) {
+            navigate("/app");
+        }
+    }, [token, navigate]);
 
     return (
         <div className="min-h-screen bg-[#0A0A0A] text-white selection:bg-indigo-500/30 overflow-x-hidden font-sans">
