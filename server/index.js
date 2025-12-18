@@ -4,7 +4,14 @@ import { Groq } from 'groq-sdk';
 import cors from 'cors';
 import { v2 as cloudinary } from 'cloudinary';
 import axios from 'axios';
+import axios from 'axios';
 import { detectSearchIntent } from './utils/intent.js';
+import jwt from 'jsonwebtoken';
+import nodemailer from 'nodemailer';
+import { User, MagicLinkToken, connectDB } from './models.js';
+
+// Connect to Database
+connectDB();
 
 dotenv.config();
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -365,6 +372,156 @@ app.get('/stream/:id', async (req, res) => {
         res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
         res.end();
         delete store[req.params.id];
+    }
+});
+
+// --- AUTHENTICATION ROUTES ---
+
+// 1. Google Auth
+app.post('/api/auth/google', async (req, res) => {
+    try {
+        const { accessToken } = req.body;
+
+        // Verify token with Google
+        const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        });
+
+        const { sub, email, name, picture } = googleRes.data;
+
+        // Find or Create User
+        let user = await User.findOne({ email });
+
+        if (!user) {
+            user = await User.create({
+                userId: sub,
+                email,
+                displayName: name,
+                photoURL: picture,
+                authProvider: 'google',
+                isVerified: true
+            });
+        } else {
+            // Update last login
+            user.lastLogin = Date.now();
+            await user.save();
+        }
+
+        // Create JWT
+        const token = jwt.sign(
+            { userId: user.userId, email: user.email },
+            process.env.JWT_SECRET || 'secret_dev_key_123',
+            { expiresIn: '7d' }
+        );
+
+        res.json({
+            success: true,
+            token,
+            user: {
+                userId: user.userId,
+                email: user.email,
+                displayName: user.displayName,
+                photoURL: user.photoURL
+            }
+        });
+
+    } catch (error) {
+        console.error('Google Auth Error:', error.message);
+        res.status(401).json({ error: 'Authentication failed' });
+    }
+});
+
+// 2. Magic Link - Send Email
+app.post('/api/auth/magic-link', async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        // Generate Token
+        const token = Math.random().toString(36).substring(2, 12).toUpperCase(); // Simple 10-char code
+
+        // Save to DB
+        await MagicLinkToken.findOneAndDelete({ email }); // Clear old tokens
+        await MagicLinkToken.create({ email, token });
+
+        // Send Email (using Nodemailer)
+        if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+            const transporter = nodemailer.createTransport({
+                service: 'gmail',
+                auth: {
+                    user: process.env.EMAIL_USER,
+                    pass: process.env.EMAIL_PASS
+                }
+            });
+
+            const link = `${process.env.FRONTEND_URL || 'https://queueai.app'}/verify-magic-link?email=${encodeURIComponent(email)}&token=${token}`;
+
+            await transporter.sendMail({
+                from: '"QueueAI" <' + process.env.EMAIL_USER + '>',
+                to: email,
+                subject: 'Your Magic Login Link',
+                html: `<p>Click here to login: <a href="${link}">${link}</a></p><p>Or use code: <b>${token}</b></p>`
+            });
+
+            res.json({ success: true, message: 'Magic link sent' });
+        } else {
+            // Dev mode: Log it
+            console.log(`[DEV] Magic Link for ${email}: ${token}`);
+            res.json({ success: true, message: 'Magic link generated (check server logs)' });
+        }
+
+    } catch (error) {
+        console.error('Magic Link Error:', error);
+        res.status(500).json({ error: 'Failed to send magic link' });
+    }
+});
+
+// 3. Verify Magic Link
+app.post('/api/auth/verify-magic-link', async (req, res) => {
+    try {
+        const { email, token } = req.body;
+
+        const record = await MagicLinkToken.findOne({ email, token });
+
+        if (!record) {
+            return res.status(400).json({ error: 'Invalid or expired token' });
+        }
+
+        // Find or Create User
+        let user = await User.findOne({ email });
+        if (!user) {
+            user = await User.create({
+                userId: 'user_' + Math.random().toString(36).substring(7),
+                email,
+                displayName: email.split('@')[0],
+                authProvider: 'email',
+                isVerified: true
+            });
+        }
+
+        // Delete token
+        await MagicLinkToken.deleteOne({ _id: record._id });
+
+        // Create JWT
+        const authToken = jwt.sign(
+            { userId: user.userId, email: user.email },
+            process.env.JWT_SECRET || 'secret_dev_key_123',
+            { expiresIn: '7d' }
+        );
+
+        res.json({
+            success: true,
+            token: authToken,
+            user: {
+                userId: user.userId,
+                email: user.email,
+                displayName: user.displayName,
+                photoURL: user.photoURL
+            }
+        });
+
+    } catch (error) {
+        console.error('Verify Error:', error);
+        res.status(500).json({ error: 'Verification failed' });
     }
 });
 
