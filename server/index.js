@@ -4,7 +4,6 @@ import { Groq } from 'groq-sdk';
 import cors from 'cors';
 import { v2 as cloudinary } from 'cloudinary';
 import axios from 'axios';
-import axios from 'axios';
 import { detectSearchIntent } from './utils/intent.js';
 import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
