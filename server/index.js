@@ -9,10 +9,11 @@ import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
 import { User, MagicLinkToken, connectDB } from './models.js';
 
+// Load env vars first
+dotenv.config();
+
 // Connect to Database
 connectDB();
-
-dotenv.config();
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 cloudinary.config({
@@ -426,7 +427,12 @@ app.post('/api/auth/google', async (req, res) => {
 
     } catch (error) {
         console.error('Google Auth Error:', error.message);
-        res.status(401).json({ error: 'Authentication failed' });
+        console.error('Error Details:', error.response?.data);
+        res.status(401).json({
+            error: 'Authentication failed',
+            details: error.message,
+            googleError: error.response?.data
+        });
     }
 });
 
