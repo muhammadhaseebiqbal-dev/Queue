@@ -57,6 +57,8 @@ async function verifyGoogleToken(token) {
         });
         return ticket.getPayload();
     } catch (error) {
+        console.error('[Auth Debug] Verification Failed:', error.message);
+        if (!process.env.GOOGLE_CLIENT_ID) console.error('[Auth Debug] GOOGLE_CLIENT_ID is missing in server environment!');
         throw new Error('Invalid Google Token');
     }
 }
