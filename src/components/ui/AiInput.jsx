@@ -5,7 +5,7 @@ import axios from "axios"
 
 import { API_URL } from "../../config"
 
-function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, toggleDeepMind, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment, activeProject, handleSend, isStreaming }) {
+function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, toggleDeepMind, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment, activeProject, handleSend, isStreaming, onStop }) {
 
     const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
     const dropdownRef = useRef(null)
@@ -32,7 +32,6 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
 
             // Max recording duration: 5 minutes (safety limit)
             maxDurationTimerRef.current = setTimeout(() => {
-                console.log('[Voice] Auto-stopping: Max duration reached (5m)');
                 stopRecording();
             }, 300000);
 
@@ -44,7 +43,6 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
 
             mediaRecorder.onstop = async () => {
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
-                console.log(`[Voice] Recording size: ${(audioBlob.size / 1024).toFixed(2)} KB`);
 
                 // Check if file is too large (Groq limit appears to be ~25MB)
                 if (audioBlob.size > 25 * 1024 * 1024) {
@@ -409,12 +407,20 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                         </div>
                     )}
                     <button
-                        onClick={toggleChatStatus}
-                        disabled={!isChatStarted && !promptInput && !attachment || isStreaming}
-                        className={`w-11 h-11 rounded-2xl flex justify-center items-center transition-all ${isChatStarted || promptInput || attachment ? 'bg-white text-black' : 'bg-tertiary text-textLight cursor-not-allowed'
-                            } ${isStreaming ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
+                        onClick={isStreaming ? onStop : toggleChatStatus}
+                        disabled={!isChatStarted && !promptInput && !attachment}
+                        className={`w-11 h-11 rounded-2xl flex justify-center items-center transition-all ${isStreaming
+                            ? 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20 shadow-lg'
+                            : isChatStarted || promptInput || attachment
+                                ? 'bg-white text-black hover:bg-gray-100'
+                                : 'bg-tertiary text-textLight cursor-not-allowed'
+                            }`}
                     >
-                        <Send size={20} />
+                        {isStreaming ? (
+                            <Square size={20} fill="currentColor" />
+                        ) : (
+                            <Send size={20} />
+                        )}
                     </button>
                 </div>
             </div>

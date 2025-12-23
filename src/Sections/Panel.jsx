@@ -114,7 +114,6 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                 PanelInteractionVars.setActiveSessionId(null);
             }
 
-            console.log(`[Panel] Deleted chat ${chatId}`);
         } catch (error) {
             console.error('Failed to delete chat:', error);
         }
@@ -269,11 +268,9 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
 
                                                     if (sessions && sessions.length > 0) {
                                                         // Continuous Chat: Load the most recent session
-                                                        console.log(`[Panel] Continuous mode: Resuming session ${sessions[0]._id}`);
                                                         PanelInteractionVars.setActiveSessionId(sessions[0]._id);
                                                     } else {
                                                         // No session exists, start clean (will create one on first message)
-                                                        console.log('[Panel] Continuous mode: Starting fresh project chat');
                                                         PanelInteractionVars.setActiveSessionId(null);
                                                     }
                                                 } catch (error) {

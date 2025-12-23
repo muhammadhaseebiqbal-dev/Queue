@@ -137,8 +137,6 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                             attachment: msg.attachment
                         }));
 
-                        console.log(`[ChatArea] Loaded ${formattedMessages.length} messages for session ${currentSessionId}`);
-
                         setcontext(formattedMessages);
                         setIsChatStarted(true);
 
@@ -251,7 +249,6 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
 
                 // Only block if we're creating a NEW session (no sessionId) AND already creating one
                 if (!currentSessionId && isCreatingSessionRef.current) {
-                    console.log('[ChatArea] Session creation already in progress, skipping...');
                     return;
                 }
 
@@ -280,7 +277,6 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                             }
 
                             if (PanelInteractionVars.triggerSidebarRefresh) {
-                                console.log('[ChatArea] New session detected, refreshing sidebar only');
                                 PanelInteractionVars.triggerSidebarRefresh();
                                 // Note: We intentionally don't call setActiveSessionId to avoid reloading
                             }
@@ -509,7 +505,6 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 let data;
                 try {
                     data = JSON.parse(event.data);
-                    console.log('[Stream Event]', data.type || 'chunk');
                 } catch (e) {
                     console.error('[Stream] JSON Parse Error:', e);
                     return; // Skip invalid chunks
@@ -590,7 +585,6 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 }
 
                 if (data.type === 'image_generated') {
-                    console.log('[Stream] Received Image:', data.url);
                     setcontext(prev => {
                         const updated = [...prev];
                         const lastIndex = updated.length - 1;
@@ -609,7 +603,6 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 }
 
                 if (data.type === 'attachment_uploaded') {
-                    console.log('[Stream] Attachment Uploaded:', data.url);
                     setcontext(prev => {
                         const updated = [...prev];
                         // Find the last user message
@@ -635,8 +628,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                     messages: updated,
                                     sessionId: PanelInteractionVars.activeSessionId, // Fix for correct session update
                                     projectId: PanelInteractionVars?.activeProject?._id
-                                }).then(() => console.log('[Stream] Context saved with persistent Image URL'))
-                                    .catch(e => console.error('Failed to save persistent image:', e));
+                                }).catch(e => console.error('Failed to save persistent image:', e));
                             }
                         }
                         return updated;
@@ -747,6 +739,26 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     const togglePanel = () => {
         setIsPanelExpanded(!isPanelExpanded)
     }
+
+    const handleStop = () => {
+        if (eventSourceRef.current) {
+            eventSourceRef.current.close();
+        }
+        setIsStreaming(false);
+        setDeepMindPhase(0);
+
+        // Reset last message streaming state if exists
+        setcontext(prev => {
+            const updated = [...prev];
+            if (updated.length > 0) {
+                updated[updated.length - 1].streaming = false;
+                if (updated[updated.length - 1].searchStatus === 'searching') {
+                    updated[updated.length - 1].searchStatus = 'done';
+                }
+            }
+            return updated;
+        });
+    };
 
     return (
 
@@ -1051,7 +1063,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     setSelectedModel={setSelectedModel}
                     isChatStarted={isChatStarted}
                     isStreaming={isStreaming}
-                    stopRecording={() => eventSourceRef.current?.close()}
+                    onStop={handleStop}
                     attachment={attachment}
                     setAttachment={setAttachment}
                     activeProject={PanelInteractionVars?.activeProject}

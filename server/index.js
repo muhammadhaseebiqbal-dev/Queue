@@ -1,54 +1,12 @@
 import express from "express";
 import dotenv from "dotenv";
 import { Groq } from 'groq-sdk';
+import { GoogleGenAI } from '@google/genai';
 import cors from 'cors';
-import { v2 as cloudinary } from 'cloudinary';
-import axios from 'axios';
-import { detectSearchIntent } from './utils/intent.js';
-import jwt from 'jsonwebtoken';
-import nodemailer from 'nodemailer';
-import { User, MagicLinkToken, connectDB } from './models.js';
 
-// Load env vars first
 dotenv.config();
-
-// Connect to Database
-connectDB();
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
-});
-
-async function generateImage(prompt) {
-    try {
-        if (!process.env.FAL_KEY) throw new Error("FAL_KEY missing");
-
-        console.log('[Image] Generating:', prompt);
-        const response = await axios.post('https://fal.run/fal-ai/flux-pro/v1.1', {
-            prompt: prompt,
-            image_size: "landscape_4_3",
-            safety_tolerance: "2" // Keep strict tolerance on Fal side too
-        }, {
-            headers: { 'Authorization': `Key ${process.env.FAL_KEY}`, 'Content-Type': 'application/json' }
-        });
-
-        const imageUrl = response.data.images[0].url;
-        console.log('[Image] Generated URL:', imageUrl);
-
-        // Upload to Cloudinary
-        const uploadResult = await cloudinary.uploader.upload(imageUrl, {
-            folder: 'queuebot_generated'
-        });
-
-        return uploadResult.secure_url;
-    } catch (error) {
-        console.error('[Image] Error:', error.response?.data || error.message);
-        throw error;
-    }
-}
+const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const app = express()
 app.use(cors());
@@ -64,7 +22,7 @@ const CONTEXT_WARNING_THRESHOLD = 3000;
 
 // DeepMind: Helper to select random models (excludes non-Groq models like Gemini)
 function selectRandomModels(count = 3, exclude = []) {
-    const allModels = Object.keys(MODEL_CONFIGS).filter(m =>
+    const allModels = Object.keys(MODEL_CONFIGS).filter(m => 
         !exclude.includes(m) && !MODEL_CONFIGS[m].provider // Only include Groq models
     );
     const shuffled = allModels.sort(() => 0.5 - Math.random());
@@ -135,7 +93,7 @@ async function summarizeContext(messages, modelKey = 'llama-3.3-70b') {
 // Save or update chat context
 app.post('/context/save', (req, res) => {
     const { userId, messages } = req.body;
-
+    
     if (!userId || !messages) {
         return res.status(400).json({ error: 'userId and messages are required' });
     }
@@ -146,8 +104,8 @@ app.post('/context/save', (req, res) => {
         tokenCount: getContextSize(messages)
     };
 
-    res.json({
-        success: true,
+    res.json({ 
+        success: true, 
         tokenCount: chatContexts[userId].tokenCount,
         needsSummarization: chatContexts[userId].tokenCount > CONTEXT_WARNING_THRESHOLD
     });
@@ -204,6 +162,10 @@ const MODEL_CONFIGS = {
         temperature: 0.6,
         max_completion_tokens: 4096,
         top_p: 1
+    },
+    'gemini-3': {
+        model: 'gemini-3-pro-preview',
+        provider: 'gemini'
     }
 };
 
@@ -223,7 +185,7 @@ app.post('/prepare-stream', async (req, res) => {
 
     // Get stored context and merge with current messages
     let contextMessages = messages || [];
-
+    
     if (userId && chatContexts[userId]) {
         const storedContext = chatContexts[userId];
         const contextSize = storedContext.tokenCount;
@@ -232,7 +194,7 @@ app.post('/prepare-stream', async (req, res) => {
         if (contextSize > MAX_CONTEXT_TOKENS) {
             console.log(`Context too large (${contextSize} tokens), summarizing...`);
             const summary = await summarizeContext(storedContext.messages);
-
+            
             if (summary) {
                 // Replace old context with summary
                 contextMessages = [
@@ -255,7 +217,7 @@ app.post('/prepare-stream', async (req, res) => {
 
 app.get('/stream/:id', async (req, res) => {
     const payload = store[req.params.id];
-
+    
     if (!payload) {
         res.status(404).json({ error: 'Stream not found' });
         return;
@@ -274,51 +236,6 @@ app.get('/stream/:id', async (req, res) => {
             }
         ];
 
-        // 1. Detect Intent (Safety & Features)
-        const intent = await detectSearchIntent(messages);
-
-        // 2. Handle Safety Violation
-        if (intent.category === 'SAFETY_VIOLATION') {
-            res.write(`data: ${JSON.stringify({ content: "SAFETY_VIOLATION_DETECTED" })}\n\n`);
-            res.end();
-            return;
-        }
-
-        // 3. Handle Image Generation
-        if (intent.category === 'IMAGE') {
-            try {
-                // Secondary Regex Check on the generated prompt itself
-                const UNSAFE_REGEX = /\b(nude|naked|sex|porn|nsfw|dick|vagina|pussy|penis|boobs|breast|tits|undressed|topless|erotic|kink|fetish|bikini|swimsuit|lingerie|underwear|panty|bra|thong)\b/i;
-                if (UNSAFE_REGEX.test(intent.image_prompt)) {
-                    console.log(`[Safety] Blocked UNSAFE PROMPT: ${intent.image_prompt}`);
-                    res.write(`data: ${JSON.stringify({ content: "SAFETY_VIOLATION_DETECTED" })}\n\n`);
-                    res.end();
-                    return;
-                }
-
-                res.write(`data: ${JSON.stringify({ content: "🎨 Generating image..." })}\n\n`);
-
-                // Use intent.image_prompt from the classifier
-                const imageUrl = await generateImage(intent.image_prompt);
-
-                // Send special image event
-                res.write(`data: ${JSON.stringify({
-                    type: 'image',
-                    url: imageUrl,
-                    prompt: intent.image_prompt
-                })}\n\n`);
-
-                res.write(`data: ${JSON.stringify({ content: `\n\n![Generated Image](${imageUrl})` })}\n\n`);
-                res.end();
-                return;
-            } catch (error) {
-                console.error("Image Gen Error:", error);
-                res.write(`data: ${JSON.stringify({ content: "Error generating image. Please try again." })}\n\n`);
-                res.end();
-                return;
-            }
-        }
-
         // Clean messages: remove frontend-only properties like 'streaming', 'model', etc.
         const cleanedMessages = messages
             .filter(msg => msg.role !== 'separator') // Remove separator messages
@@ -329,12 +246,12 @@ app.get('/stream/:id', async (req, res) => {
 
         // Add system prompt for LaTeX rendering if not already present
         const hasSystemPrompt = cleanedMessages.some(msg => msg.role === 'system');
-        const finalMessages = hasSystemPrompt
-            ? cleanedMessages
+        const finalMessages = hasSystemPrompt 
+            ? cleanedMessages 
             : [
                 {
                     role: 'system',
-                    content: 'You are a helpful AI assistant. When explaining mathematical concepts, formulas, equations, or physics problems, ALWAYS use LaTeX notation. Use inline LaTeX with single dollar signs $...$ for inline formulas and double dollar signs $$...$$ for display equations. For example: "The quadratic formula is $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$" or for display mode use $$E=mc^2$$. Always format mathematical expressions properly in LaTeX.\n\nSTRICT SAFETY RULES: You must NEVER generate, describe, or assist with sexual, explicitly violent, or NSFW content. If the user request asks for such content (e.g. "nude", "explicit", "sexual"), you must REFUSE immediately. In case of refusal for safety reasons, your response must start with the exact string: "SAFETY_VIOLATION_DETECTED". Do not apologize, just return that string followed by a very brief explanation.'
+                    content: 'You are a helpful AI assistant. When explaining mathematical concepts, formulas, equations, or physics problems, ALWAYS use LaTeX notation. Use inline LaTeX with single dollar signs $...$ for inline formulas and double dollar signs $$...$$ for display equations. For example: "The quadratic formula is $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$" or for display mode use $$E=mc^2$$. Always format mathematical expressions properly in LaTeX.'
                 },
                 ...cleanedMessages
             ];
@@ -343,28 +260,53 @@ app.get('/stream/:id', async (req, res) => {
         const modelKey = payload.model || 'llama-3.3-70b';
         const config = MODEL_CONFIGS[modelKey] || MODEL_CONFIGS['llama-3.3-70b'];
 
-        // Use Groq for all models (Gemini removed)
-        const chatCompletion = await groq.chat.completions.create({
-            messages: finalMessages,
-            model: config.model,
-            temperature: config.temperature,
-            max_completion_tokens: config.max_completion_tokens,
-            top_p: config.top_p,
-            stream: true,
-            stop: null,
-            ...(config.reasoning_effort && { reasoning_effort: config.reasoning_effort })
-        });
+        // Check if this is a Gemini model
+        if (config.provider === 'gemini') {
+            // Build conversation string from messages
+            const conversationText = finalMessages
+                .map(msg => {
+                    if (msg.role === 'system') return `System: ${msg.content}`;
+                    if (msg.role === 'user') return `User: ${msg.content}`;
+                    return `Assistant: ${msg.content}`;
+                })
+                .join('\n\n');
 
-        for await (const chunk of chatCompletion) {
-            const content = chunk.choices[0]?.delta?.content || '';
-            if (content) {
-                res.write(`data: ${JSON.stringify({ content })}\n\n`);
+            // Use the simple Gemini 3 API format
+            const response = await gemini.models.generateContentStream({
+                model: config.model,
+                contents: conversationText
+            });
+
+            for await (const chunk of response) {
+                const content = chunk.text || '';
+                if (content) {
+                    res.write(`data: ${JSON.stringify({ content })}\n\n`);
+                }
+            }
+        } else {
+            // Use Groq for other models
+            const chatCompletion = await groq.chat.completions.create({
+                messages: finalMessages,
+                model: config.model,
+                temperature: config.temperature,
+                max_completion_tokens: config.max_completion_tokens,
+                top_p: config.top_p,
+                stream: true,
+                stop: null,
+                ...(config.reasoning_effort && { reasoning_effort: config.reasoning_effort })
+            });
+
+            for await (const chunk of chatCompletion) {
+                const content = chunk.choices[0]?.delta?.content || '';
+                if (content) {
+                    res.write(`data: ${JSON.stringify({ content })}\n\n`);
+                }
             }
         }
 
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
         res.end();
-
+        
         // Clean up store
         delete store[req.params.id];
     } catch (error) {
@@ -372,161 +314,6 @@ app.get('/stream/:id', async (req, res) => {
         res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
         res.end();
         delete store[req.params.id];
-    }
-});
-
-// --- AUTHENTICATION ROUTES ---
-
-// 1. Google Auth
-app.post('/api/auth/google', async (req, res) => {
-    try {
-        const { accessToken } = req.body;
-
-        // Verify token with Google
-        const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
-            headers: { Authorization: `Bearer ${accessToken}` }
-        });
-
-        const { sub, email, name, picture } = googleRes.data;
-
-        // Find or Create User
-        let user = await User.findOne({ email });
-
-        if (!user) {
-            user = await User.create({
-                userId: sub,
-                email,
-                displayName: name,
-                photoURL: picture,
-                authProvider: 'google',
-                isVerified: true
-            });
-        } else {
-            // Update last login
-            user.lastLogin = Date.now();
-            await user.save();
-        }
-
-        // Create JWT
-        const token = jwt.sign(
-            { userId: user.userId, email: user.email },
-            process.env.JWT_SECRET || 'secret_dev_key_123',
-            { expiresIn: '7d' }
-        );
-
-        res.json({
-            success: true,
-            token,
-            user: {
-                userId: user.userId,
-                email: user.email,
-                displayName: user.displayName,
-                photoURL: user.photoURL
-            }
-        });
-
-    } catch (error) {
-        console.error('Google Auth Error:', error.message);
-        console.error('Error Details:', error.response?.data);
-        res.status(401).json({
-            error: 'Authentication failed',
-            details: error.message,
-            googleError: error.response?.data
-        });
-    }
-});
-
-// 2. Magic Link - Send Email
-app.post('/api/auth/magic-link', async (req, res) => {
-    try {
-        const { email } = req.body;
-
-        // Generate Token
-        const token = Math.random().toString(36).substring(2, 12).toUpperCase(); // Simple 10-char code
-
-        // Save to DB
-        await MagicLinkToken.findOneAndDelete({ email }); // Clear old tokens
-        await MagicLinkToken.create({ email, token });
-
-        // Send Email (using Nodemailer)
-        if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-            const transporter = nodemailer.createTransport({
-                service: 'gmail',
-                auth: {
-                    user: process.env.EMAIL_USER,
-                    pass: process.env.EMAIL_PASS
-                }
-            });
-
-            const link = `${process.env.FRONTEND_URL || 'https://queueai.app'}/verify-magic-link?email=${encodeURIComponent(email)}&token=${token}`;
-
-            await transporter.sendMail({
-                from: '"QueueAI" <' + process.env.EMAIL_USER + '>',
-                to: email,
-                subject: 'Your Magic Login Link',
-                html: `<p>Click here to login: <a href="${link}">${link}</a></p><p>Or use code: <b>${token}</b></p>`
-            });
-
-            res.json({ success: true, message: 'Magic link sent' });
-        } else {
-            // Dev mode: Log it
-            console.log(`[DEV] Magic Link for ${email}: ${token}`);
-            res.json({ success: true, message: 'Magic link generated (check server logs)' });
-        }
-
-    } catch (error) {
-        console.error('Magic Link Error:', error);
-        res.status(500).json({ error: 'Failed to send magic link' });
-    }
-});
-
-// 3. Verify Magic Link
-app.post('/api/auth/verify-magic-link', async (req, res) => {
-    try {
-        const { email, token } = req.body;
-
-        const record = await MagicLinkToken.findOne({ email, token });
-
-        if (!record) {
-            return res.status(400).json({ error: 'Invalid or expired token' });
-        }
-
-        // Find or Create User
-        let user = await User.findOne({ email });
-        if (!user) {
-            user = await User.create({
-                userId: 'user_' + Math.random().toString(36).substring(7),
-                email,
-                displayName: email.split('@')[0],
-                authProvider: 'email',
-                isVerified: true
-            });
-        }
-
-        // Delete token
-        await MagicLinkToken.deleteOne({ _id: record._id });
-
-        // Create JWT
-        const authToken = jwt.sign(
-            { userId: user.userId, email: user.email },
-            process.env.JWT_SECRET || 'secret_dev_key_123',
-            { expiresIn: '7d' }
-        );
-
-        res.json({
-            success: true,
-            token: authToken,
-            user: {
-                userId: user.userId,
-                email: user.email,
-                displayName: user.displayName,
-                photoURL: user.photoURL
-            }
-        });
-
-    } catch (error) {
-        console.error('Verify Error:', error);
-        res.status(500).json({ error: 'Verification failed' });
     }
 });
 
@@ -542,7 +329,7 @@ app.post('/deepmind/prepare', async (req, res) => {
     } else if (messages) {
         contextMessages = messages;
     }
-
+    
     if (userId && chatContexts[userId]) {
         const storedContext = chatContexts[userId];
         const contextSize = storedContext.tokenCount;
@@ -550,7 +337,7 @@ app.post('/deepmind/prepare', async (req, res) => {
         if (contextSize > MAX_CONTEXT_TOKENS) {
             console.log(`Context too large (${contextSize} tokens), summarizing...`);
             const summary = await summarizeContext(storedContext.messages);
-
+            
             if (summary) {
                 contextMessages = [
                     {
@@ -607,8 +394,8 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
     try {
         // Add system prompt if needed
         const hasSystemPrompt = session.messages.some(msg => msg.role === 'system');
-        const finalMessages = hasSystemPrompt
-            ? session.messages
+        const finalMessages = hasSystemPrompt 
+            ? session.messages 
             : [
                 {
                     role: 'system',
@@ -632,7 +419,7 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
         session.phase = 2;
         // Get all unused models first, then add one from phase 1 if we need more
         const unusedModels = Object.keys(MODEL_CONFIGS).filter(m => !session.phase1Models.includes(m));
-        session.phase2Models = unusedModels.length >= 3
+        session.phase2Models = unusedModels.length >= 3 
             ? selectRandomModels(3, session.phase1Models)
             : [...unusedModels, session.phase1Models[0]]; // Add one phase1 model if needed
         res.write(`data: ${JSON.stringify({ type: 'phase', phase: 2, models: session.phase2Models })}\n\n`);
@@ -640,7 +427,7 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
         // Create individual prompts for each phase2 model to validate specific phase1 responses
         for (let i = 0; i < session.phase2Models.length; i++) {
             const modelKey = session.phase2Models[i];
-
+            
             // Give each validator a concise view of phase 1 responses
             const phase2Prompt = `Analyze these AI responses and provide a comprehensive answer:
 
@@ -661,7 +448,7 @@ Provide your own well-reasoned answer synthesizing the best insights.`;
         // PHASE 3: GPT-OSS synthesizes final answer
         session.phase = 3;
         res.write(`data: ${JSON.stringify({ type: 'phase', phase: 3, models: ['gpt-oss-120b'] })}\n\n`);
-
+        
         // Send phase3_start signal immediately to show UI progress
         res.write(`data: ${JSON.stringify({ type: 'phase3_start' })}\n\n`);
 
@@ -685,7 +472,7 @@ Provide the final answer incorporating the best insights.`;
 
         // Stream the final synthesis - send initial content event to start streaming UI immediately
         res.write(`data: ${JSON.stringify({ type: 'content', content: '' })}\n\n`);
-
+        
         const config = MODEL_CONFIGS['gpt-oss-120b'];
         const finalCompletion = await groq.chat.completions.create({
             messages: synthesisMessages,
@@ -707,7 +494,7 @@ Provide the final answer incorporating the best insights.`;
 
         res.write(`data: ${JSON.stringify({ type: 'done', done: true })}\n\n`);
         res.end();
-
+        
         // Clean up
         delete deepMindSessions[sessionId];
     } catch (error) {
@@ -717,21 +504,6 @@ Provide the final answer incorporating the best insights.`;
         delete deepMindSessions[sessionId];
     }
 });
-
-app.get('/', (req, res) => {
-    res.json({
-        message: "Welcome to the QueueBot API",
-        status: true,
-        data: {
-            name: "QueueBot",
-            version: "2.5.1",
-            description: "Standard api for my queuebot project",
-            license: "ISC",
-            author: "Haseeb Iqbal"
-        }
-    });
-});
-
 
 app.listen(process.env.PORT || 5000, () => {
     console.log(`Server running on http://localhost:${process.env.PORT}`);
