@@ -716,3 +716,70 @@ Provide the final answer incorporating the best insights.`;
 app.listen(process.env.PORT || 5000, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${process.env.PORT}`);
 });
+
+// --- Database APIs ---
+
+// Helper: Delete Session
+app.delete('/api/session/:sessionId', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        await Session.findByIdAndDelete(sessionId);
+        await Message.deleteMany({ sessionId }); // Clean up messages
+        console.log(`[Session Delete] Deleted session ${sessionId}`);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete Session Error:', error);
+        res.status(500).json({ error: 'Failed to delete session' });
+    }
+});
+
+// Reset Session for User (New Chat)
+app.post('/api/session/reset', async (req, res) => {
+    const { userId } = req.body;
+    // In DB mode, "Reset" just means we return a null sessionId to client so it starts fresh
+    // The client handles clearing the UI.
+    res.json({ sessionId: null, message: "Session reset" });
+});
+
+// Fetch Sidebar Data (Projects & Sessions)
+app.get('/api/sidebar/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        // 1. Get Projects
+        const projects = await Project.find({ userId }).sort({ updatedAt: -1 });
+
+        // 2. Get Sessions (History)
+        const sessions = await Session.find({ userId }).sort({ updatedAt: -1 }).limit(20);
+
+        res.json({ projects, sessions });
+    } catch (error) {
+        console.error('Sidebar Data Error:', error);
+        res.status(500).json({ error: 'Failed to fetch sidebar data' });
+    }
+});
+
+// Create Project
+app.post('/api/projects', async (req, res) => {
+    try {
+        const { userId, name, description } = req.body;
+        const project = await Project.create({ userId, name, description });
+        res.json(project);
+    } catch (error) {
+        console.error('Create Project Error:', error);
+        res.status(500).json({ error: 'Failed to create project' });
+    }
+});
+
+// Get Messages for a Session
+app.get('/api/messages/:sessionId', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const messages = await Message.find({ sessionId }).sort({ timestamp: 1 });
+        res.json({ messages });
+    } catch (error) {
+        console.error('Get Messages Error:', error);
+        res.status(500).json({ error: 'Failed to fetch messages' });
+    }
+});
+
