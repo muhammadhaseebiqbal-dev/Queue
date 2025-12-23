@@ -505,6 +505,6 @@ Provide the final answer incorporating the best insights.`;
     }
 });
 
-app.listen(process.env.PORT || 5000, () => {
+app.listen(process.env.PORT || 5000, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${process.env.PORT}`);
 });
