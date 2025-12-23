@@ -66,6 +66,7 @@ async function verifyGoogleToken(token) {
 // Endpoint: Google Auth
 app.post('/api/auth/google', async (req, res) => {
     try {
+        console.log('[Auth Debug] Google Auth Body:', req.body);
         const { token } = req.body;
         const payload = await verifyGoogleToken(token);
 
