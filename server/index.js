@@ -3,14 +3,193 @@ import dotenv from "dotenv";
 import { Groq } from 'groq-sdk';
 
 import cors from 'cors';
+import { v2 as cloudinary } from 'cloudinary';
+import { connectDB, Project, Session, Message, User, isConnected, MagicLinkToken } from './models.js';
+import { OAuth2Client } from 'google-auth-library';
+import jwt from 'jsonwebtoken';
+import { authMiddleware } from './middleware/auth.js';
+import multer from 'multer';
+import fs from 'fs';
+import nodemailer from 'nodemailer';
+import crypto from 'crypto';
 
 dotenv.config();
+connectDB();
+
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+// Configure Cloudinary Global
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
 
 const app = express()
 app.use(cors());
 app.use(express.json());
+
+// Global Headers for COOP/COEP (Critical for Google Auth Popup)
+app.use((req, res, next) => {
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+    next();
+});
+
+// Email Transporter
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+// Google Auth Client
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+async function verifyGoogleToken(token) {
+    try {
+        const ticket = await client.verifyIdToken({
+            idToken: token,
+            audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        return ticket.getPayload();
+    } catch (error) {
+        throw new Error('Invalid Google Token');
+    }
+}
+
+// Endpoint: Google Auth
+app.post('/api/auth/google', async (req, res) => {
+    try {
+        const { token } = req.body;
+        const payload = await verifyGoogleToken(token);
+
+        const { email, name, picture, sub: googleId } = payload;
+
+        let user = await User.findOne({ email });
+
+        if (!user) {
+            user = await User.create({
+                email,
+                name,
+                picture,
+                googleId,
+                provider: 'google'
+            });
+        } else if (!user.googleId) {
+            user.googleId = googleId;
+            user.picture = picture || user.picture;
+            await user.save();
+        }
+
+        const jwtToken = jwt.sign(
+            { userId: user._id, email: user.email },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        res.json({ token: jwtToken, user });
+
+    } catch (error) {
+        console.error('Google Auth Error:', error);
+        res.status(401).json({ error: 'Authentication failed' });
+    }
+});
+
+// Endpoint: Send Magic Link
+app.post('/api/auth/magic-link', async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required" });
+
+    try {
+        const token = crypto.randomBytes(32).toString('hex');
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+        await MagicLinkToken.findOneAndUpdate(
+            { email },
+            {
+                email,
+                token: hashedToken,
+                expiresAt: new Date(+new Date() + 15 * 60 * 1000)
+            },
+            { upsert: true, new: true }
+        );
+
+        const appUrl = req.headers.origin || 'http://localhost:5173';
+        const magicLink = `${appUrl}/verify-magic-link?token=${token}&email=${encodeURIComponent(email)}`;
+
+        const mailOptions = {
+            from: process.env.EMAIL_USER || 'noreply@queuebot.com',
+            to: email,
+            subject: 'Sign in to QueueBot',
+            html: `
+                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2>Sign in to QueueBot</h2>
+                    <p>Click the button below to sign in. This link is valid for 15 minutes.</p>
+                    <a href="${magicLink}" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Sign In</a>
+                </div>
+            `
+        };
+
+        if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+            await transporter.sendMail(mailOptions);
+            console.log(`[Auth] Magic link sent to ${email}`);
+            res.json({ message: 'Magic link sent' });
+        } else {
+            console.log(`[Auth] Email not configured. Magic Link: ${magicLink}`);
+            res.json({ message: 'Magic link logged (Email not configured)' });
+        }
+
+    } catch (error) {
+        console.error('Magic Link Error:', error);
+        res.status(500).json({ error: 'Failed to send magic link' });
+    }
+});
+
+// Endpoint: Verify Magic Link
+app.post('/api/auth/verify-magic-link', async (req, res) => {
+    const { email, token } = req.body;
+
+    try {
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+        const record = await MagicLinkToken.findOne({
+            email,
+            token: hashedToken,
+            expiresAt: { $gt: new Date() }
+        });
+
+        if (!record) {
+            return res.status(400).json({ error: 'Invalid or expired token' });
+        }
+
+        let user = await User.findOne({ email });
+        if (!user) {
+            user = await User.create({
+                email,
+                name: email.split('@')[0],
+                provider: 'email'
+            });
+        }
+
+        const jwtToken = jwt.sign(
+            { userId: user._id, email: user.email },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        // Delete used token
+        await MagicLinkToken.deleteOne({ _id: record._id });
+
+        res.json({ token: jwtToken, user });
+    } catch (error) {
+        console.error('Verify Magic Link Error:', error);
+        res.status(500).json({ error: 'Verification failed' });
+    }
+});
 
 const store = {};
 const chatContexts = {}; // Store conversation contexts by userId
