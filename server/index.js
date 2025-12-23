@@ -1,12 +1,12 @@
 import express from "express";
 import dotenv from "dotenv";
 import { Groq } from 'groq-sdk';
-import { GoogleGenAI } from '@google/genai';
+
 import cors from 'cors';
 
 dotenv.config();
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
 
 const app = express()
 app.use(cors());
@@ -22,7 +22,7 @@ const CONTEXT_WARNING_THRESHOLD = 3000;
 
 // DeepMind: Helper to select random models (excludes non-Groq models like Gemini)
 function selectRandomModels(count = 3, exclude = []) {
-    const allModels = Object.keys(MODEL_CONFIGS).filter(m => 
+    const allModels = Object.keys(MODEL_CONFIGS).filter(m =>
         !exclude.includes(m) && !MODEL_CONFIGS[m].provider // Only include Groq models
     );
     const shuffled = allModels.sort(() => 0.5 - Math.random());
@@ -93,7 +93,7 @@ async function summarizeContext(messages, modelKey = 'llama-3.3-70b') {
 // Save or update chat context
 app.post('/context/save', (req, res) => {
     const { userId, messages } = req.body;
-    
+
     if (!userId || !messages) {
         return res.status(400).json({ error: 'userId and messages are required' });
     }
@@ -104,8 +104,8 @@ app.post('/context/save', (req, res) => {
         tokenCount: getContextSize(messages)
     };
 
-    res.json({ 
-        success: true, 
+    res.json({
+        success: true,
         tokenCount: chatContexts[userId].tokenCount,
         needsSummarization: chatContexts[userId].tokenCount > CONTEXT_WARNING_THRESHOLD
     });
@@ -185,7 +185,7 @@ app.post('/prepare-stream', async (req, res) => {
 
     // Get stored context and merge with current messages
     let contextMessages = messages || [];
-    
+
     if (userId && chatContexts[userId]) {
         const storedContext = chatContexts[userId];
         const contextSize = storedContext.tokenCount;
@@ -194,7 +194,7 @@ app.post('/prepare-stream', async (req, res) => {
         if (contextSize > MAX_CONTEXT_TOKENS) {
             console.log(`Context too large (${contextSize} tokens), summarizing...`);
             const summary = await summarizeContext(storedContext.messages);
-            
+
             if (summary) {
                 // Replace old context with summary
                 contextMessages = [
@@ -217,7 +217,7 @@ app.post('/prepare-stream', async (req, res) => {
 
 app.get('/stream/:id', async (req, res) => {
     const payload = store[req.params.id];
-    
+
     if (!payload) {
         res.status(404).json({ error: 'Stream not found' });
         return;
@@ -246,8 +246,8 @@ app.get('/stream/:id', async (req, res) => {
 
         // Add system prompt for LaTeX rendering if not already present
         const hasSystemPrompt = cleanedMessages.some(msg => msg.role === 'system');
-        const finalMessages = hasSystemPrompt 
-            ? cleanedMessages 
+        const finalMessages = hasSystemPrompt
+            ? cleanedMessages
             : [
                 {
                     role: 'system',
@@ -306,7 +306,7 @@ app.get('/stream/:id', async (req, res) => {
 
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
         res.end();
-        
+
         // Clean up store
         delete store[req.params.id];
     } catch (error) {
@@ -329,7 +329,7 @@ app.post('/deepmind/prepare', async (req, res) => {
     } else if (messages) {
         contextMessages = messages;
     }
-    
+
     if (userId && chatContexts[userId]) {
         const storedContext = chatContexts[userId];
         const contextSize = storedContext.tokenCount;
@@ -337,7 +337,7 @@ app.post('/deepmind/prepare', async (req, res) => {
         if (contextSize > MAX_CONTEXT_TOKENS) {
             console.log(`Context too large (${contextSize} tokens), summarizing...`);
             const summary = await summarizeContext(storedContext.messages);
-            
+
             if (summary) {
                 contextMessages = [
                     {
@@ -394,8 +394,8 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
     try {
         // Add system prompt if needed
         const hasSystemPrompt = session.messages.some(msg => msg.role === 'system');
-        const finalMessages = hasSystemPrompt 
-            ? session.messages 
+        const finalMessages = hasSystemPrompt
+            ? session.messages
             : [
                 {
                     role: 'system',
@@ -419,7 +419,7 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
         session.phase = 2;
         // Get all unused models first, then add one from phase 1 if we need more
         const unusedModels = Object.keys(MODEL_CONFIGS).filter(m => !session.phase1Models.includes(m));
-        session.phase2Models = unusedModels.length >= 3 
+        session.phase2Models = unusedModels.length >= 3
             ? selectRandomModels(3, session.phase1Models)
             : [...unusedModels, session.phase1Models[0]]; // Add one phase1 model if needed
         res.write(`data: ${JSON.stringify({ type: 'phase', phase: 2, models: session.phase2Models })}\n\n`);
@@ -427,7 +427,7 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
         // Create individual prompts for each phase2 model to validate specific phase1 responses
         for (let i = 0; i < session.phase2Models.length; i++) {
             const modelKey = session.phase2Models[i];
-            
+
             // Give each validator a concise view of phase 1 responses
             const phase2Prompt = `Analyze these AI responses and provide a comprehensive answer:
 
@@ -448,7 +448,7 @@ Provide your own well-reasoned answer synthesizing the best insights.`;
         // PHASE 3: GPT-OSS synthesizes final answer
         session.phase = 3;
         res.write(`data: ${JSON.stringify({ type: 'phase', phase: 3, models: ['gpt-oss-120b'] })}\n\n`);
-        
+
         // Send phase3_start signal immediately to show UI progress
         res.write(`data: ${JSON.stringify({ type: 'phase3_start' })}\n\n`);
 
@@ -472,7 +472,7 @@ Provide the final answer incorporating the best insights.`;
 
         // Stream the final synthesis - send initial content event to start streaming UI immediately
         res.write(`data: ${JSON.stringify({ type: 'content', content: '' })}\n\n`);
-        
+
         const config = MODEL_CONFIGS['gpt-oss-120b'];
         const finalCompletion = await groq.chat.completions.create({
             messages: synthesisMessages,
@@ -494,7 +494,7 @@ Provide the final answer incorporating the best insights.`;
 
         res.write(`data: ${JSON.stringify({ type: 'done', done: true })}\n\n`);
         res.end();
-        
+
         // Clean up
         delete deepMindSessions[sessionId];
     } catch (error) {
