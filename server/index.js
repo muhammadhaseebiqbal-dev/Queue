@@ -1,6 +1,8 @@
 import express from "express";
 import dotenv from "dotenv";
 import { Groq } from 'groq-sdk';
+import axios from 'axios';
+
 
 import cors from 'cors';
 import { v2 as cloudinary } from 'cloudinary';
@@ -64,13 +66,37 @@ async function verifyGoogleToken(token) {
 }
 
 // Endpoint: Google Auth
+// Endpoint: Google Auth
 app.post('/api/auth/google', async (req, res) => {
     try {
-        console.log('[Auth Debug] Google Auth Body:', req.body);
-        const { token } = req.body;
-        const payload = await verifyGoogleToken(token);
+        console.log('[Auth Debug] Body:', req.body);
+        const { accessToken, token } = req.body;
+        const tokenToVerify = accessToken || token;
 
-        const { email, name, picture, sub: googleId } = payload;
+        if (!tokenToVerify) throw new Error('No token provided');
+
+        // Verify Access Token via UserInfo Endpoint
+        let googleUser;
+        try {
+            const response = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${tokenToVerify}` }
+            });
+            googleUser = response.data;
+        } catch (err) {
+            console.error('[Auth] Access Token verification failed:', err.message);
+            // Fallback: Legacy ID Token support
+            try {
+                const ticket = await client.verifyIdToken({
+                    idToken: tokenToVerify,
+                    audience: process.env.GOOGLE_CLIENT_ID,
+                });
+                googleUser = ticket.getPayload();
+            } catch (jwtErr) {
+                throw new Error('Invalid Google Token');
+            }
+        }
+
+        const { email, name, picture, sub: googleId } = googleUser;
 
         let user = await User.findOne({ email });
 
@@ -97,7 +123,7 @@ app.post('/api/auth/google', async (req, res) => {
         res.json({ token: jwtToken, user });
 
     } catch (error) {
-        console.error('Google Auth Error:', error);
+        console.error('Google Auth Error:', error.message);
         res.status(401).json({ error: 'Authentication failed' });
     }
 });
