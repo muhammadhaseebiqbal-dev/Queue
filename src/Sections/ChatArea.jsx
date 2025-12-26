@@ -511,7 +511,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     role: "assistant",
                     content: "",
                     streaming: true,
-                    model: 'gemini-2.0-flash',
+                    model: 'gemini-3-flash-preview',
                     mode: 'persona',
                     persona: PanelInteractionVars.activePersona
                 }]);

@@ -1560,7 +1560,7 @@ app.post('/api/personas/chat', async (req, res) => {
             systemInstruction: persona.systemPrompt
         };
 
-        const model = 'gemini-flash-latest';
+        const model = 'gemini-3-flash-preview';
 
         // 3. Construct Content History
         const contents = [];

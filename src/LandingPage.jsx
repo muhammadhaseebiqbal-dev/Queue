@@ -12,22 +12,22 @@ function LandingPage() {
         <div className="min-h-screen bg-[#0A0A0A] text-white selection:bg-indigo-500/30 font-sans">
             <Helmet>
                 <title>QueueAI - The Ultimate Multi-Model AI Workspace</title>
-                <meta name="description" content="Unlock the power of multiple AI models in one workspace. Chat with GPT, Claude, Llama, and specialized Personas. Features persistent memory, file uploads, and voice interaction." />
-                <meta name="keywords" content="AI workspace, Multi-model AI, GPT wrapper, Claude alternative, AI personas, Developer AI tools" />
+                <meta name="description" content="A multimodel ai chatbot that manages all of your project and provide canvas full of funny personas" />
+                <meta name="keywords" content="QueueAI, Queue Ai, Queue Bot, Multi-model AI, AI personas, Developer AI tools, AI workspace" />
 
                 {/* Open Graph / Facebook */}
                 <meta property="og:type" content="website" />
                 <meta property="og:url" content="https://queueai.app/" />
                 <meta property="og:title" content="QueueAI - The Ultimate Multi-Model AI Workspace" />
-                <meta property="og:description" content="Chat with specialised AI personas, use multiple models (GPT, Llama, Qwen), and keep your context forever. The workspace for power users." />
-                <meta property="og:image" content="https://queueai.app/og-image.jpg" />
+                <meta property="og:description" content="A multimodel ai chatbot that manages all of your project and provide canvas full of funny personas" />
+                <meta property="og:image" content="https://queueai.app/seo.png" />
 
                 {/* Twitter */}
                 <meta property="twitter:card" content="summary_large_image" />
                 <meta property="twitter:url" content="https://queueai.app/" />
                 <meta property="twitter:title" content="QueueAI - The Ultimate Multi-Model AI Workspace" />
-                <meta property="twitter:description" content="Chat with specialised AI personas, use multiple models (GPT, Llama, Qwen), and keep your context forever." />
-                <meta property="twitter:image" content="https://queueai.app/og-image.jpg" />
+                <meta property="twitter:description" content="A multimodel ai chatbot that manages all of your project and provide canvas full of funny personas" />
+                <meta property="twitter:image" content="https://queueai.app/seo.png" />
 
                 <link rel="canonical" href="https://queueai.app/" />
             </Helmet>
