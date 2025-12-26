@@ -1,4 +1,15 @@
 {
+    "headers": [
+        {
+            "source": "/(.*)",
+            "headers": [
+                {
+                    "key": "Cross-Origin-Opener-Policy",
+                    "value": "same-origin-allow-popups"
+                }
+            ]
+        }
+    ],
     "rewrites": [
         {
             "source": "/api/:path*",
@@ -23,6 +34,10 @@
         {
             "source": "/models",
             "destination": "http://13.62.57.106:5000/models"
+        },
+        {
+            "source": "/deepmind/:path*",
+            "destination": "http://13.62.57.106:5000/deepmind/:path*"
         },
         {
             "source": "/(.*)",

@@ -19,6 +19,7 @@ function Workspace() {
 
     const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0)
     const [activeProject, setActiveProject] = useState(null)
+    const [activePersona, setActivePersona] = useState(null)
 
     const PanelInteractionVars = {
         isPanelExpanded: isPanelExpanded,
@@ -29,7 +30,9 @@ function Workspace() {
         sidebarRefreshKey,
         triggerSidebarRefresh: () => setSidebarRefreshKey(prev => prev + 1),
         activeProject,
-        setActiveProject
+        setActiveProject,
+        activePersona,
+        setActivePersona
     }
 
     return (

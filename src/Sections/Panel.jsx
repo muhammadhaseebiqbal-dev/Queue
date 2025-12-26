@@ -1,8 +1,9 @@
 import { motion, AnimatePresence } from "framer-motion"
-import { Plus, FolderOpen, MessageSquare, Plug, ChevronRight, Trash2, Clock } from "lucide-react"
-import { useState, useEffect } from "react"
+import { Plus, FolderOpen, MessageSquare, Plug, ChevronRight, Trash2, Clock, Users, ChevronDown } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
 import axios from 'axios'
 import { API_URL } from '../config'
+import ConfirmModal from '../components/ui/ConfirmModal'
 
 function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars }) {
     const [activeSection, setActiveSection] = useState('chats')
@@ -14,6 +15,8 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
     ])
 
     const [isLoading, setIsLoading] = useState(false)
+    const [showDeleteProjectModal, setShowDeleteProjectModal] = useState(false)
+    const [projectToDelete, setProjectToDelete] = useState(null)
 
     // Fetch Sidebar Data
     useEffect(() => {
@@ -36,7 +39,9 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                         uniqueSessions.set(s._id, {
                             id: s._id,
                             title: s.title,
-                            timestamp: new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                            timestamp: new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                            personaId: s.personaId,
+                            persona: s.persona
                         });
                     }
                 });
@@ -114,26 +119,49 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
         }
     }
 
-    const handleDeleteChat = async (chatId, event) => {
-        // Prevent triggering the chat selection
-        event.stopPropagation();
-
+    const handleDeleteChat = async (chatId, e) => {
+        e.stopPropagation(); // Prevent triggering the parent onClick
         try {
-            await axios.delete(`${API_URL}/api/session/${chatId}?userId=${PanelInteractionVars.userId}`);
-
-            // Remove from local state
-            setChats(prev => prev.filter(chat => chat.id !== chatId));
-
-            // If this was the active chat, clear it
-            if (PanelInteractionVars.activeSessionId === chatId) {
+            await axios.delete(`${API_URL}/api/sessions/${chatId}`);
+            // Refresh sidebar
+            if (PanelInteractionVars.triggerSidebarRefresh) {
+                PanelInteractionVars.triggerSidebarRefresh();
+            }
+            // If the deleted chat was active, clear it
+            if (PanelInteractionVars?.activeSessionId === chatId) {
                 PanelInteractionVars.setActiveSessionId(null);
             }
-
-            console.log(`[Panel] Deleted chat ${chatId}`);
         } catch (error) {
-            console.error('Failed to delete chat:', error);
+            console.error("Error deleting chat:", error);
         }
-    }
+    };
+
+    const handleDeleteProject = async (projectId, e) => {
+        e.stopPropagation(); // Prevent triggering the parent onClick
+        // Find the project to show its name in the modal
+        const project = projects.find(p => p._id === projectId);
+        setProjectToDelete(project);
+        setShowDeleteProjectModal(true);
+    };
+
+    const confirmDeleteProject = async () => {
+        if (!projectToDelete) return;
+
+        try {
+            await axios.delete(`${API_URL}/api/projects/${projectToDelete._id}`);
+            // Refresh sidebar
+            if (PanelInteractionVars.triggerSidebarRefresh) {
+                PanelInteractionVars.triggerSidebarRefresh();
+            }
+            // If the deleted project was active, clear it
+            if (PanelInteractionVars?.activeProject?._id === projectToDelete._id) {
+                PanelInteractionVars.setActiveProject(null);
+                PanelInteractionVars.setActiveSessionId(null);
+            }
+        } catch (error) {
+            console.error("Error deleting project:", error);
+        }
+    };
 
     // Animation variants for tab content
     const tabVariants = {
@@ -197,7 +225,7 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
 
                     {/* Navigation Tabs */}
                     <div className="flex border-b-2 border-border p-0 gap-0 mx-0 mt-0 rounded-none bg-secondary">
-                        {['chats', 'projects', 'connectors'].map((tab) => (
+                        {['chats', 'projects', 'personas', 'connectors'].map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveSection(tab)}
@@ -214,6 +242,41 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                     {/* Content Area */}
                     <div className="flex-1 overflow-y-auto scrollbar-hide p-0 relative">
                         <AnimatePresence mode="wait">
+                            {activeSection === 'personas' && (
+                                <motion.div
+                                    key="personas"
+                                    initial="hidden"
+                                    animate="visible"
+                                    exit="exit"
+                                    variants={tabVariants}
+                                    className="p-2 space-y-2 absolute w-full"
+                                >
+                                    <PersonasView
+                                        personaChats={chats.filter(chat => chat.personaId)}
+                                        onSelect={async (persona) => {
+                                            console.log('Selected Persona:', persona);
+                                            if (PanelInteractionVars.setActivePersona) {
+                                                PanelInteractionVars.setActivePersona(persona);
+
+                                                // Find existing session for this persona
+                                                const existingPersonaSession = chats.find(chat => chat.personaId === persona.id);
+
+                                                if (existingPersonaSession) {
+                                                    // Continue existing conversation
+                                                    console.log('[Persona] Continuing existing session:', existingPersonaSession.id);
+                                                    PanelInteractionVars.setActiveSessionId(existingPersonaSession.id);
+                                                } else {
+                                                    // Start new conversation (will be created on first message)
+                                                    console.log('[Persona] Starting new session for:', persona.name);
+                                                    PanelInteractionVars.setActiveSessionId(null);
+                                                }
+
+                                                PanelInteractionVars.setActiveProject && PanelInteractionVars.setActiveProject(null);
+                                            }
+                                        }} />
+                                </motion.div>
+                            )}
+
                             {activeSection === 'chats' && (
                                 <motion.div
                                     key="chats"
@@ -221,7 +284,7 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                                     animate="visible"
                                     exit="exit"
                                     variants={tabVariants}
-                                    className="p-2 space-y-1 absolute w-full"
+                                    className="absolute w-full h-full"
                                 >
                                     {isLoading ? (
                                         // Skeleton Loader for Chat History
@@ -237,31 +300,11 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                                             ))}
                                         </div>
                                     ) : (
-                                        chats.map((chat) => (
-                                            <div
-                                                key={chat.id}
-                                                onClick={() => {
-                                                    PanelInteractionVars.setActiveSessionId(chat.id);
-                                                    PanelInteractionVars.setActiveProject?.(null); // Clear project for regular chats
-                                                }}
-                                                className={`w-full p-3 rounded-xl transition-colors flex items-start gap-2 group cursor-pointer ${PanelInteractionVars?.activeSessionId === chat.id && !PanelInteractionVars?.activeProject
-                                                    ? 'bg-[#1a1a1a]' // Dark solid background for active chat
-                                                    : 'hover:bg-tertiary'
-                                                    }`}
-                                            >
-                                                <MessageSquare size={16} className="text-textLight mt-1 flex-shrink-0" />
-                                                <div className="flex-1 text-left overflow-hidden">
-                                                    <p className="text-sm text-text truncate font-medium">{chat.title}</p>
-                                                    <p className="text-xs text-textLight mt-1">{chat.timestamp}</p>
-                                                </div>
-                                                <button
-                                                    onClick={(e) => handleDeleteChat(chat.id, e)}
-                                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                                >
-                                                    <Trash2 size={14} className="text-textLight hover:text-red-400" />
-                                                </button>
-                                            </div>
-                                        ))
+                                        <ChatHistoryList
+                                            chats={chats}
+                                            PanelInteractionVars={PanelInteractionVars}
+                                            handleDeleteChat={handleDeleteChat}
+                                        />
                                     )}
                                 </motion.div>
                             )}
@@ -287,9 +330,8 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                                     </div>
                                     {projects.map((project) => (
                                         <button
-                                            key={project._id || project.id}
+                                            key={project._id}
                                             onClick={async () => {
-                                                // Set active project
                                                 PanelInteractionVars.setActiveProject(project);
 
                                                 // Fetch sessions for this project to find the latest one
@@ -312,20 +354,28 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                                                 }
                                             }}
                                             className={`w-full p-3 rounded-xl transition-colors flex items-center justify-between group ${PanelInteractionVars?.activeProject?._id === project._id
-                                                ? 'bg-[#1a1a1a]' // Dark solid background for active project
+                                                ? 'bg-[#1a1a1a]'
                                                 : 'hover:bg-tertiary'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-2">
                                                 <span
-                                                    className="text-lg flex-shrink-0"
-                                                    style={{ filter: 'grayscale(1)' }}
+                                                    className="text-xl"
+                                                    style={{ filter: `drop-shadow(0 0 8px ${project.color}40)` }}
                                                 >
                                                     {project.emoji || '📁'}
                                                 </span>
                                                 <span className="text-sm text-text font-medium">{project.name}</span>
                                             </div>
-                                            <span className="text-xs text-textLight bg-primary px-2 py-0.5 rounded-full border border-border">{project.chats || 0}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-textLight bg-primary px-2 py-0.5 rounded-full border border-border">{project.chats || 0}</span>
+                                                <button
+                                                    onClick={(e) => handleDeleteProject(project._id, e)}
+                                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-red-500/20 rounded"
+                                                >
+                                                    <Trash2 size={14} className="text-textLight hover:text-red-400" />
+                                                </button>
+                                            </div>
                                         </button>
                                     ))}
                                 </motion.div>
@@ -481,6 +531,21 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                         </motion.div>
                     )}
                 </AnimatePresence>
+
+                {/* Delete Project Confirmation Modal */}
+                <ConfirmModal
+                    isOpen={showDeleteProjectModal}
+                    onClose={() => {
+                        setShowDeleteProjectModal(false);
+                        setProjectToDelete(null);
+                    }}
+                    onConfirm={confirmDeleteProject}
+                    title="Delete Project"
+                    message={`Are you sure you want to delete "${projectToDelete?.name}"? This will permanently delete the project and all associated chats.`}
+                    confirmText="Delete"
+                    cancelText="Cancel"
+                    danger={true}
+                />
             </motion.div>
         </>
     )
@@ -488,3 +553,154 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
 }
 
 export default Panel
+
+// Chat History List Component with Scroll-to-Bottom
+function ChatHistoryList({ chats, PanelInteractionVars, handleDeleteChat }) {
+    const [showScrollButton, setShowScrollButton] = useState(false);
+    const scrollContainerRef = useRef(null);
+
+    const handleScroll = () => {
+        if (scrollContainerRef.current) {
+            const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+            const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+            setShowScrollButton(!isNearBottom && scrollTop > 150);
+        }
+    };
+
+    const scrollToBottom = () => {
+        scrollContainerRef.current?.scrollTo({
+            top: scrollContainerRef.current.scrollHeight,
+            behavior: 'smooth'
+        });
+    };
+
+    const filteredChats = chats.filter(chat => !chat.personaId);
+
+    return (
+        <div className="relative h-full">
+            <div
+                ref={scrollContainerRef}
+                onScroll={handleScroll}
+                className="space-y-1 px-2 pt-2 pb-2 h-full overflow-y-auto"
+            >
+                {filteredChats.length === 0 ? (
+                    <p className="text-xs text-textLight text-center py-4">No chats yet</p>
+                ) : (
+                    filteredChats.map((chat) => (
+                        <div
+                            key={chat.id}
+                            onClick={() => {
+                                PanelInteractionVars.setActiveSessionId(chat.id);
+                                PanelInteractionVars.setActiveProject?.(null);
+                                PanelInteractionVars.setActivePersona?.(null);
+                            }}
+                            className={`w-full p-3 rounded-xl transition-colors flex items-start gap-2 group cursor-pointer ${PanelInteractionVars?.activeSessionId === chat.id && !PanelInteractionVars?.activeProject
+                                ? 'bg-[#1a1a1a]'
+                                : 'hover:bg-tertiary'
+                                }`}
+                        >
+                            <MessageSquare size={16} className="text-textLight mt-1 flex-shrink-0" />
+                            <div className="flex-1 text-left overflow-hidden">
+                                <p className="text-sm text-text truncate font-medium">{chat.title}</p>
+                                <p className="text-xs text-textLight mt-1">{chat.timestamp}</p>
+                            </div>
+                            <button
+                                onClick={(e) => handleDeleteChat(chat.id, e)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                                <Trash2 size={14} className="text-textLight hover:text-red-400" />
+                            </button>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* Scroll to Bottom Button */}
+            <AnimatePresence>
+                {showScrollButton && (
+                    <motion.button
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        onClick={scrollToBottom}
+                        className="absolute bottom-2 right-2 p-2 bg-tertiary/90 backdrop-blur-xl border border-white/10 text-text rounded-full shadow-lg hover:bg-white/10 transition-colors z-20"
+                    >
+                        <ChevronDown size={16} />
+                    </motion.button>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+}
+
+function PersonasView({ onSelect, personaChats }) {
+    const [personas, setPersonas] = useState([]);
+    const [grouped, setGrouped] = useState({});
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchPersonas = async () => {
+            try {
+                const res = await axios.get(`${API_URL}/api/personas`);
+                setPersonas(res.data.personas);
+
+                // Group and sort personas
+                const groupedData = res.data.grouped;
+                const sortedGrouped = {};
+
+                Object.keys(groupedData).forEach(category => {
+                    // Sort: personas with chat history first
+                    sortedGrouped[category] = groupedData[category].sort((a, b) => {
+                        const aHasChat = personaChats?.some(chat => chat.personaId === a.id);
+                        const bHasChat = personaChats?.some(chat => chat.personaId === b.id);
+                        if (aHasChat && !bHasChat) return -1;
+                        if (!aHasChat && bHasChat) return 1;
+                        return 0;
+                    });
+                });
+
+                setGrouped(sortedGrouped);
+            } catch (err) {
+                console.error("Failed to load personas:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchPersonas();
+    }, [personaChats]);
+
+    if (loading) return <div className="p-4 text-center text-textLight">Loading Personas...</div>;
+
+    return (
+        <div className="space-y-6 pb-4">
+            {Object.keys(grouped).map(category => (
+                <div key={category}>
+                    <h3 className="text-xs font-bold text-textLight uppercase tracking-wider mb-2 px-2">{category}</h3>
+                    <div className="grid grid-cols-1 gap-2">
+                        {grouped[category].map(persona => {
+                            const hasChat = personaChats?.some(chat => chat.personaId === persona.id);
+                            return (
+                                <button
+                                    key={persona.id}
+                                    onClick={() => onSelect(persona)}
+                                    className="flex items-center gap-3 p-3 rounded-xl bg-[#1a1a1a] hover:bg-tertiary transition-colors text-left group border border-white/5 relative"
+                                >
+                                    {/* Green indicator for active personas */}
+                                    {hasChat && (
+                                        <div className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-lg shadow-green-500/50"></div>
+                                    )}
+                                    <span className="text-2xl">{persona.emoji}</span>
+                                    <div className="flex-1 overflow-hidden">
+                                        <h4 className="text-sm font-medium text-text truncate">{persona.name}</h4>
+                                        <p className="text-xs text-textLight truncate">{persona.role}</p>
+                                    </div>
+                                    <ChevronRight size={14} className="text-textLight opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}

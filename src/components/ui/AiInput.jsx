@@ -5,7 +5,7 @@ import axios from "axios"
 
 import { API_URL } from "../../config"
 
-function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, toggleDeepMind, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment, activeProject, handleSend, isStreaming, stopGeneration, className }) {
+function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, toggleDeepMind, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment, activeProject, activePersona, handleSend, isStreaming, stopGeneration, className }) {
 
     const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
     const dropdownRef = useRef(null)
@@ -366,8 +366,8 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                 </AnimatePresence>
 
                 <div className="flex gap-2 relative">
-                    {/* Model Selector - Hidden when in a project */}
-                    {!activeProject && (
+                    {/* Model Selector - Hidden when in a project or persona mode */}
+                    {!activeProject && !activePersona && (
                         <div className="relative hidden md:block" ref={dropdownRef}>
                             <button
                                 onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}

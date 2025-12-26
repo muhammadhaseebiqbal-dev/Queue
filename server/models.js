@@ -54,6 +54,8 @@ const projectSchema = new mongoose.Schema({
 const sessionSchema = new mongoose.Schema({
     userId: { type: String, required: true, index: true },
     projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', default: null },
+    personaId: { type: String, default: null }, // Persona ID if this is a persona chat
+    persona: { type: Object, default: null }, // Full persona object for easy access
     title: { type: String, default: 'New Chat' },
     preview: { type: String, default: '' }, // Last message preview
     model: { type: String, default: 'llama-3.3-70b' },

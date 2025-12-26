@@ -1,5 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
+dotenv.config();
 import { Groq } from 'groq-sdk';
 
 import cors from 'cors';
@@ -9,6 +10,8 @@ import { detectSearchIntent } from './utils/intent.js';
 import { getWeatherData } from './utils/weather.js';
 
 import { parseFile } from './utils/fileParser.js';
+import { GoogleGenAI } from '@google/genai'; // Gemini 2.5 SDK
+import { PERSONAS } from './config/personas.js'; // Personas Config
 import { connectDB, Project, Session, Message, User, isConnected } from './models.js'; // Import Models
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
@@ -319,7 +322,7 @@ async function summarizeContext(messages, modelKey = 'llama-3.3-70b') {
 
 // Save or update chat context (Persisted to MongoDB)
 app.post('/context/save', async (req, res) => {
-    const { userId, messages, projectId, sessionId } = req.body;
+    const { userId, messages, projectId, sessionId, personaId, persona } = req.body;
 
     if (!userId || !messages) {
         return res.status(400).json({ error: 'userId and messages are required' });
@@ -358,6 +361,8 @@ app.post('/context/save', async (req, res) => {
                 const newSession = await Session.create({
                     userId,
                     projectId: projectId || null,
+                    personaId: personaId || null,
+                    persona: persona || null,
                     title,
                     preview: title,
                     model: messages[0].model || 'gpt-oss-120b',
@@ -1299,6 +1304,24 @@ app.post('/api/projects', upload.array('files'), async (req, res) => {
     }
 });
 
+// Delete a project
+app.delete('/api/projects/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Delete all sessions associated with this project
+        await Session.deleteMany({ projectId: id });
+
+        // Delete the project itself
+        await Project.findByIdAndDelete(id);
+
+        res.json({ success: true, message: 'Project deleted successfully' });
+    } catch (error) {
+        console.error('Delete Project Error:', error);
+        res.status(500).json({ error: 'Failed to delete project' });
+    }
+});
+
 // Create New Session
 app.post('/api/sessions', async (req, res) => {
     try {
@@ -1351,7 +1374,7 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
                     const docContext = project.documents
                         .map(doc => `[DOCUMENT: ${doc.name}]\n${doc.content.substring(0, 5000)}...`) // Limit to 5k chars per doc for now
                         .join('\n\n');
-                    
+
                     const projectContextMsg = {
                         role: 'system',
                         content: `[PROJECT CONTEXT]\nThe following documents are uploaded to this project. Use them to answer user queries:\n\n${docContext}\n[END PROJECT CONTEXT]`
@@ -1501,6 +1524,106 @@ Provide the final answer incorporating the best insights.`;
     }
 });
 
+// --- PERSONAS ENDPOINTS ---
+
+// List all personas
+app.get('/api/personas', (req, res) => {
+    // Return personas grouped by category
+    const grouped = PERSONAS.reduce((acc, p) => {
+        if (!acc[p.category]) acc[p.category] = [];
+        acc[p.category].push(p);
+        return acc;
+    }, {});
+
+    res.json({ personas: PERSONAS, grouped });
+});
+
+// Chat with a Persona (Streamed)
+app.post('/api/personas/chat', async (req, res) => {
+    try {
+        const { personaId, message, previousMessages } = req.body;
+
+        // 1. Find Persona
+        const persona = PERSONAS.find(p => p.id === personaId);
+        if (!persona) return res.status(404).json({ error: "Persona not found" });
+
+        // 2. Configure Gemini Client
+        const ai = new GoogleGenAI({
+            apiKey: process.env.GEMINI_API_KEY
+        });
+
+        const config = {
+            temperature: 0.7,
+            topP: 0.95,
+            topK: 40,
+            maxOutputTokens: 2048,
+            systemInstruction: persona.systemPrompt
+        };
+
+        const model = 'gemini-flash-latest';
+
+        // 3. Construct Content History
+        const contents = [];
+
+        if (previousMessages && previousMessages.length > 0) {
+            previousMessages.forEach(msg => {
+                contents.push({
+                    role: msg.role === 'assistant' ? 'model' : 'user',
+                    parts: [{ text: msg.content }]
+                });
+            });
+        }
+
+        // Add new user message
+        contents.push({
+            role: 'user',
+            parts: [{ text: message }]
+        });
+
+        // 4. Generate Stream using correct SDK pattern
+        const response = await ai.models.generateContentStream({
+            model,
+            config,
+            contents
+        });
+
+        // 5. Stream Response
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        for await (const chunk of response) {
+            console.log('[Persona] Chunk received:', JSON.stringify(chunk, null, 2));
+
+            // Try different ways to extract text
+            let chunkText = null;
+
+            if (typeof chunk.text === 'function') {
+                chunkText = chunk.text();
+            } else if (chunk.text) {
+                chunkText = chunk.text;
+            } else if (chunk.candidates && chunk.candidates[0]?.content?.parts) {
+                chunkText = chunk.candidates[0].content.parts.map(p => p.text).join('');
+            }
+
+            console.log('[Persona] Extracted text:', chunkText);
+
+            if (chunkText) {
+                // Send standard SSE format
+                res.write(`data: ${JSON.stringify({ content: chunkText })}\n\n`);
+            }
+        }
+
+        res.write('data: [DONE]\n\n');
+        res.end();
+
+    } catch (error) {
+        console.error('Persona Chat Error:', error);
+        res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+        res.end();
+    }
+});
+
 // default route
 app.get('/', (req, res) => {
     res.json({
@@ -1514,6 +1637,24 @@ app.get('/', (req, res) => {
             author: 'Haseeb Iqbal',
         }
     });
+});
+
+// Delete a session (for persona reset)
+app.delete('/api/sessions/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Delete all messages in the session
+        await Message.deleteMany({ sessionId: id });
+
+        // Delete the session itself
+        await Session.findByIdAndDelete(id);
+
+        res.json({ success: true, message: 'Session deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting session:', error);
+        res.status(500).json({ error: 'Failed to delete session' });
+    }
 });
 
 app.listen(process.env.PORT || 5000, '0.0.0.0', () => {

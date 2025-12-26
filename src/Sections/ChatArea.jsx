@@ -1,10 +1,11 @@
-import { Copy, Sparkles, Image as ImageIcon, FileText, PanelRightOpen, X, ThumbsUp, ThumbsDown, Check, Bot, Rocket, Mountain, Moon, ChevronDown } from "lucide-react";
+import { Copy, Sparkles, Image as ImageIcon, FileText, PanelRightOpen, X, ThumbsUp, ThumbsDown, Check, Bot, Rocket, Mountain, Moon, ChevronDown, Trash2 } from "lucide-react";
 import AiInput from "../components/ui/AiInput"
 import MarkdownRenderer from "../components/ui/MarkdownRenderer";
 import DeepMindProgress from "../components/ui/DeepMindProgress"
 import SearchStatus from "../components/ui/SearchStatus";
 import WeatherCard from "../components/ui/WeatherCard";
 import ImageGenCard from "../components/ui/ImageGenCard";
+import ConfirmModal from "../components/ui/ConfirmModal";
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from "framer-motion"
 import { useState, useEffect, useRef } from "react"
@@ -28,6 +29,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     const [isMobileModelDropdownOpen, setIsMobileModelDropdownOpen] = useState(false)
     const [showScrollButton, setShowScrollButton] = useState(false)
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+    const [showResetModal, setShowResetModal] = useState(false)
 
     const models = [
         { id: 'gpt-oss-120b', name: 'GPT-OSS 120B', Icon: Bot },
@@ -202,6 +204,16 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
         }
     }, [PanelInteractionVars?.activeProject]);
 
+    // Handle Persona Switching
+    useEffect(() => {
+        if (PanelInteractionVars?.activePersona) {
+            // Clear current chat context when switching to a persona
+            setcontext([]);
+            setIsChatStarted(false);
+            setpromptInput('');
+        }
+    }, [PanelInteractionVars?.activePersona]);
+
 
     const mobileDropdownRef = useRef(null)
 
@@ -292,7 +304,9 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     userId,
                     messages: context,
                     sessionId: currentSessionId,
-                    projectId: PanelInteractionVars?.activeProject?._id
+                    projectId: PanelInteractionVars?.activeProject?._id,
+                    personaId: PanelInteractionVars?.activePersona?.id,
+                    persona: PanelInteractionVars?.activePersona
                 })
                     .then((response) => {
                         // Only refresh sidebar if backend created a NEW session
@@ -487,6 +501,86 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             setpromptInput("");
             const attachmentToSend = attachment; // Capture current attachment
             setAttachment(null); // Reset attachment state immediately
+
+            setAttachment(null); // Clear attachment
+
+            // --- PERSONA CHAT FLOW ---
+            if (PanelInteractionVars?.activePersona) {
+                // Add empty system message for persona
+                setcontext(prev => [...prev, {
+                    role: "assistant",
+                    content: "",
+                    streaming: true,
+                    model: 'gemini-2.0-flash',
+                    mode: 'persona',
+                    persona: PanelInteractionVars.activePersona
+                }]);
+                setIsStreaming(true);
+                streamingMessageRef.current = "";
+
+                // Stream from Personas Endpoint
+                fetch(`${API_URL}/api/personas/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        personaId: PanelInteractionVars.activePersona.id,
+                        message: messageToSend,
+                        previousMessages: context // Send full history for persona context
+                    })
+                }).then(async response => {
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+
+                    try {
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+
+                            const chunk = decoder.decode(value);
+                            const lines = chunk.split('\n\n');
+
+                            for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                    const dataStr = line.slice(6);
+                                    if (dataStr === '[DONE]') {
+                                        setIsStreaming(false);
+                                        setcontext(prev => {
+                                            const updated = [...prev];
+                                            if (updated.length > 0) updated[updated.length - 1].streaming = false;
+                                            return updated;
+                                        });
+                                        break;
+                                    }
+
+                                    try {
+                                        const parsed = JSON.parse(dataStr);
+                                        if (parsed.content) {
+                                            const textChunk = parsed.content;
+                                            streamingMessageRef.current += textChunk;
+
+                                            setcontext(prev => {
+                                                const updated = [...prev];
+                                                if (updated.length > 0) {
+                                                    updated[updated.length - 1].content = streamingMessageRef.current;
+                                                }
+                                                return updated;
+                                            });
+                                        }
+                                    } catch (e) { console.error('Error parsing persona stream:', e); }
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Stream reading error:', err);
+                        setIsStreaming(false);
+                    }
+                }).catch(err => {
+                    console.error('Persona API Error:', err);
+                    setIsStreaming(false);
+                });
+
+                return; // STOP HERE (Do not run standard flow)
+            }
 
             // Step 1: Prepare stream with userId for context
             const response = await axios.post(`${API_URL}/prepare-stream`, {
@@ -849,7 +943,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             )}
 
             {/* Welcome Screen - Shows when no chat is started */}
-            {!isChatStarted && (
+            {!isChatStarted && !PanelInteractionVars?.activePersona && (
                 <motion.div
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -858,6 +952,25 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[200%] pointer-events-none"
                 >
                     <img src="/logo.svg" alt="QueueAI" className="w-24 h-24 md:w-32 md:h-32 opacity-40" />
+                </motion.div>
+            )}
+
+            {/* Persona Greeting Screen */}
+            {!isChatStarted && PanelInteractionVars?.activePersona && (
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="w-full max-w-2xl px-4 text-center mb-8 z-10"
+                >
+                    <div className="text-6xl mb-4">{PanelInteractionVars.activePersona.emoji}</div>
+                    <h2 className="text-3xl font-bold text-text mb-2">{PanelInteractionVars.activePersona.name}</h2>
+                    <div className="inline-block px-3 py-1 rounded-full bg-white/10 text-xs text-textLight uppercase tracking-wider mb-6">
+                        {PanelInteractionVars.activePersona.role}
+                    </div>
+                    <p className="text-xl text-textLight italic max-w-lg mx-auto leading-relaxed">
+                        "{PanelInteractionVars.activePersona.greeting}"
+                    </p>
                 </motion.div>
             )}
 
@@ -1067,7 +1180,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             >
                 <div className="w-[95%] md:w-[70%] relative flex flex-col">
                     <AnimatePresence>
-                        {showScrollButton && (
+                        {showScrollButton && isChatStarted && (
                             <motion.button
                                 initial={{ opacity: 0, scale: 0.8 }}
                                 animate={{ opacity: 1, scale: 1 }}
@@ -1083,6 +1196,42 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                             </motion.button>
                         )}
                     </AnimatePresence>
+
+                    {/* Active Persona Indicator */}
+                    <AnimatePresence>
+                        {PanelInteractionVars?.activePersona && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 10 }}
+                                className="absolute bottom-full left-0 mb-3 flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-lg z-20"
+                            >
+                                <span className="text-lg">{PanelInteractionVars.activePersona.emoji}</span>
+                                <div className="flex flex-col">
+                                    <span className="text-xs font-bold text-text">{PanelInteractionVars.activePersona.name}</span>
+                                    <span className="text-[10px] text-textLight uppercase tracking-wider">{PanelInteractionVars.activePersona.category}</span>
+                                </div>
+                                {/* Reset Chat History Button */}
+                                {isChatStarted && (
+                                    <button
+                                        onClick={() => setShowResetModal(true)}
+                                        className="ml-2 p-1 hover:bg-orange-500/20 rounded-full text-textLight hover:text-orange-400 transition-colors"
+                                        title="Reset conversation"
+                                    >
+                                        <Trash2 size={12} />
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => PanelInteractionVars?.setActivePersona(null)}
+                                    className="ml-1 p-1 hover:bg-white/10 rounded-full text-textLight hover:text-white transition-colors"
+                                    title="Close persona"
+                                >
+                                    <X size={12} />
+                                </button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
                     <AiInput
                         promptInput={promptInput}
                         setpromptInput={setpromptInput}
@@ -1107,6 +1256,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                         attachment={attachment}
                         setAttachment={setAttachment}
                         activeProject={PanelInteractionVars?.activeProject}
+                        activePersona={PanelInteractionVars?.activePersona}
                         className="w-full"
                     />
                 </div>
@@ -1140,6 +1290,31 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Reset Persona Conversation Modal */}
+            <ConfirmModal
+                isOpen={showResetModal}
+                onClose={() => setShowResetModal(false)}
+                onConfirm={async () => {
+                    if (PanelInteractionVars?.activeSessionId) {
+                        try {
+                            await axios.delete(`${API_URL}/api/sessions/${PanelInteractionVars.activeSessionId}`);
+                            // Clear local state
+                            setcontext([]);
+                            setIsChatStarted(false);
+                            PanelInteractionVars.setActiveSessionId(null);
+                            PanelInteractionVars.triggerSidebarRefresh?.();
+                        } catch (error) {
+                            console.error('Failed to reset persona chat:', error);
+                        }
+                    }
+                }}
+                title="Reset Conversation"
+                message={`Are you sure you want to reset your conversation with ${PanelInteractionVars?.activePersona?.name}? This will permanently delete all messages.`}
+                confirmText="Reset"
+                cancelText="Cancel"
+                danger={true}
+            />
 
         </motion.div >
     )
