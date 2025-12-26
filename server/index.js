@@ -38,6 +38,24 @@ const app = express()
 app.use(cors());
 app.use(express.json({ limit: '100mb' })); // Increase limit for file uploads
 
+// Endpoint: Get All Personas
+app.get('/api/personas', (req, res) => {
+    // Group personas by category
+    const grouped = PERSONAS.reduce((acc, persona) => {
+        const category = persona.category || 'Other';
+        if (!acc[category]) {
+            acc[category] = [];
+        }
+        acc[category].push(persona);
+        return acc;
+    }, {});
+
+    res.json({
+        personas: PERSONAS,
+        grouped: grouped
+    });
+});
+
 const store = {};
 const chatContexts = {}; // Store conversation contexts by userId
 const deepMindSessions = {}; // Store DeepMind processing sessions
@@ -1631,7 +1649,7 @@ app.get('/', (req, res) => {
         status: true,
         data: {
             name: 'QueueBot',
-            version: '2.5.0',
+            version: '3.0.1',
             description: 'Standard api for my queuebot project',
             license: 'ISC',
             author: 'Haseeb Iqbal',
