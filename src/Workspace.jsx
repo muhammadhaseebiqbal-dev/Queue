@@ -21,6 +21,7 @@ function Workspace() {
     const [chatResetToken, setChatResetToken] = useState(0)
     const [activeProject, setActiveProject] = useState(null)
     const [activePersona, setActivePersona] = useState(null)
+    const [isSideBySideMode, setIsSideBySideMode] = useState(false)
 
     const PanelInteractionVars = {
         isPanelExpanded: isPanelExpanded,
@@ -35,7 +36,9 @@ function Workspace() {
         activeProject,
         setActiveProject,
         activePersona,
-        setActivePersona
+        setActivePersona,
+        isSideBySideMode,
+        setIsSideBySideMode
     }
 
     return (

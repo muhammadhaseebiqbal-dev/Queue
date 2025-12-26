@@ -1,9 +1,19 @@
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Check, Sparkles, Zap, Brain, Image as ImageIcon, Lock, Mail, Database, MessageSquare, Users, Shield, Upload } from "lucide-react";
+import { ArrowLeft, Check, Sparkles, Zap, Brain, Image as ImageIcon, Lock, Mail, Database, MessageSquare, Users, Shield, Upload, Columns } from "lucide-react";
 
 function Changelog() {
     const updates = [
+        {
+            date: "December 26, 2024",
+            version: "v3.0.2",
+            title: "Side-by-Side Mode & Model Updates",
+            items: [
+                { icon: Columns, text: "Side-by-Side Chat - Compare 4 AI models (GPT-OSS, Qwen, Llama, Kimi) simultaneously" },
+                { icon: Check, text: "Replaced decommissioned Groq models with Llama 3.1 8B Instant" },
+                { icon: Sparkles, text: "Improved mobile layout and Welcome Screen behavior in split mode" }
+            ]
+        },
         {
             date: "December 26, 2024",
             version: "v3.0.1",

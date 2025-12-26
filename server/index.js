@@ -200,6 +200,52 @@ app.post('/api/auth/verify-magic-link', async (req, res) => {
 const MAX_CONTEXT_TOKENS = 4000;
 const CONTEXT_WARNING_THRESHOLD = 3000;
 
+
+// --- NEW ENDPOINT: Direct Chat Stream (For Side-by-Side Mode) ---
+app.post('/api/chat', async (req, res) => {
+    const { messages, model } = req.body;
+
+    if (!messages || !model) {
+        return res.status(400).json({ error: "Missing messages or model" });
+    }
+
+    // Map Frontend IDs to Actual Groq Models
+    const MODEL_MAP = {
+        'gpt-oss-120b': 'llama-3.3-70b-versatile', // Mapping "GPT-OSS" to Llama 3.3 70B
+        'qwen-3-32b': 'llama-3.1-8b-instant',       // Mapping "Qwen" to Llama 3.1 8B (Fast)
+        'llama-3.3-70b': 'llama-3.3-70b-versatile', // Correcting specific ID
+        'kimi-k2': 'llama-3.1-8b-instant'           // Mapping "Kimi" to Llama 3.1 8B (Fast)
+    };
+
+    const targetModel = MODEL_MAP[model] || 'llama-3.3-70b-versatile';
+
+    // Set headers for streaming
+    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    try {
+        const stream = await groq.chat.completions.create({
+            messages: messages,
+            model: targetModel,
+            stream: true,
+            max_tokens: 1024
+        });
+
+        for await (const chunk of stream) {
+            const content = chunk.choices[0]?.delta?.content || "";
+            if (content) {
+                res.write(content);
+            }
+        }
+
+        res.end();
+    } catch (error) {
+        console.error(`[API/Chat] Error streaming ${model}:`, error);
+        res.write(`\n\n[Error: ${error.message}]`);
+        res.end();
+    }
+});
+
 // Cloudinary Helper (Dynamic Import)
 async function uploadToCloudinary(base64OrUrl, options = {}) {
     // Check if configuration exists

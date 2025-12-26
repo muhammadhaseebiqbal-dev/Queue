@@ -1,5 +1,6 @@
-import { Copy, Sparkles, Image as ImageIcon, FileText, PanelRightOpen, X, ThumbsUp, ThumbsDown, Check, Bot, Rocket, Mountain, Moon, ChevronDown, Trash2 } from "lucide-react";
+import { Copy, Sparkles, Image as ImageIcon, FileText, PanelRightOpen, X, ThumbsUp, ThumbsDown, Check, Bot, Rocket, Mountain, Moon, ChevronDown, Trash2, MoreVertical, LogOut, Columns } from "lucide-react";
 import WelcomeScreen from "../components/ui/WelcomeScreen";
+import SideBySideGrid from "../components/ui/SideBySideGrid";
 import AiInput from "../components/ui/AiInput"
 import MarkdownRenderer from "../components/ui/MarkdownRenderer";
 import DeepMindProgress from "../components/ui/DeepMindProgress"
@@ -21,7 +22,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     const [isSendPrompt, setIsSendPrompt] = useState(false)
     const [context, setcontext] = useState([])
     const [isStreaming, setIsStreaming] = useState(false)
-    const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile')
+    const [selectedModel, setSelectedModel] = useState('gpt-oss-120b')
     const [isDeepMindEnabled, setIsDeepMindEnabled] = useState(false)
     const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false)
     const [attachment, setAttachment] = useState(null) // New Attachment State
@@ -31,12 +32,19 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     const [showScrollButton, setShowScrollButton] = useState(false)
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
     const [showResetModal, setShowResetModal] = useState(false)
+    const [showMenu, setShowMenu] = useState(false);
+    const [sideBySideStreams, setSideBySideStreams] = useState({
+        'gpt-oss-120b': '',
+        'qwen-3-32b': '',
+        'llama-3.3-70b': '',
+        'kimi-k2': ''
+    });
 
     const models = [
-        { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', Icon: Bot },
-        { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B', Icon: Rocket },
-        { id: 'llama3-70b-8192', name: 'Llama 3 70B', Icon: Mountain },
-        { id: 'gemma2-9b-it', name: 'Gemma 2 9B', Icon: Moon }
+        { id: 'gpt-oss-120b', name: 'GPT-OSS 120B', Icon: Bot },
+        { id: 'qwen-3-32b', name: 'QWEN 3 32B', Icon: Rocket },
+        { id: 'llama-3.3-70b', name: 'LLAMA 3.3 70B', Icon: Mountain },
+        { id: 'kimi-k2', name: 'KIMI K2', Icon: Moon }
     ]
 
     // const [userId] = useState(() => nanoid()) // Removed: using shared userId from App
@@ -72,7 +80,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
         }
     };
 
-    const previousModel = useRef('llama-3.3-70b-versatile')
+    const previousModel = useRef('gpt-oss-120b')
     const streamingMessageRef = useRef("")
     const eventSourceRef = useRef(null)
     const messagesEndRef = useRef(null)
@@ -496,6 +504,62 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     const completeQuery = async () => {
         if ((!promptInput || !promptInput.trim()) && !attachment) return; // Allow sending if only attachment exists
 
+        const messageContent = promptInput; // Capture before clearing
+
+        // --- Side-by-Side Mode Logic ---
+        if (PanelInteractionVars?.isSideBySideMode) {
+            setpromptInput(''); // Clear input
+            setIsStreaming(true);
+            setSideBySideStreams({
+                'gpt-oss-120b': '',
+                'qwen-3-32b': '',
+                'llama-3.3-70b': '',
+                'kimi-k2': ''
+            });
+
+            const modelsToRun = ['gpt-oss-120b', 'qwen-3-32b', 'llama-3.3-70b', 'kimi-k2'];
+
+            // Fire all requests in parallel
+            modelsToRun.forEach(modelId => {
+                const fetchStream = async () => {
+                    try {
+                        const response = await fetch(`${API_URL}/api/chat`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                messages: [{ role: 'user', content: messageContent }],
+                                model: modelId,
+                                userId,
+                            })
+                        });
+
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            const chunk = decoder.decode(value);
+                            setSideBySideStreams(prev => ({
+                                ...prev,
+                                [modelId]: (prev[modelId] || '') + chunk
+                            }));
+                        }
+                    } catch (err) {
+                        console.error(`Error streaming ${modelId}:`, err);
+                        setSideBySideStreams(prev => ({
+                            ...prev,
+                            [modelId]: (prev[modelId] || '') + "\n\n*[Error: Failed to generate response]*"
+                        }));
+                    }
+                };
+                fetchStream();
+            });
+
+            setIsStreaming(false);
+            return;
+        }
+
         // Route to DeepMind if enabled
         if (isDeepMindEnabled) {
             return completeDeepMindQuery();
@@ -915,6 +979,60 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 </motion.div>
             </motion.button>
 
+            {/* Header / Menu */}
+            <div className={`absolute top-4 right-4 z-50 flex items-center gap-2`}>
+                <div className="relative">
+                    <button
+                        onClick={() => setShowMenu(!showMenu)}
+                        className="p-2 rounded-full bg-tertiary/80 backdrop-blur border border-border/50 text-text hover:bg-white/10 transition-colors"
+                    >
+                        <MoreVertical size={20} />
+                    </button>
+
+                    <AnimatePresence>
+                        {showMenu && (
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                                className="absolute right-0 top-full mt-2 w-48 bg-secondary border border-border rounded-xl shadow-2xl overflow-hidden z-[100]"
+                            >
+                                <button
+                                    onClick={() => {
+                                        PanelInteractionVars.setIsSideBySideMode(!PanelInteractionVars.isSideBySideMode);
+                                        // Auto-close sidebar
+                                        if (!PanelInteractionVars.isSideBySideMode && PanelInteractionVars.setIsPanelExpanded) {
+                                            PanelInteractionVars.setIsPanelExpanded(false);
+                                        }
+                                        setShowMenu(false);
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-text hover:bg-white/5 transition-colors"
+                                >
+                                    <Columns size={16} className="text-purple-400" />
+                                    <span>{PanelInteractionVars.isSideBySideMode ? 'Standard Chat' : 'Side-by-Side'}</span>
+                                </button>
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        // Clear all auth tokens
+                                        localStorage.removeItem("queuebot_token");
+                                        localStorage.removeItem("queuebot_userid");
+                                        localStorage.removeItem("queuebot_sessions");
+                                        window.location.href = '/signin';
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors border-t border-white/5"
+                                >
+                                    <LogOut size={16} />
+                                    <span>Logout</span>
+                                </button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            </div>
+
+
+
             {/* Mobile Model Switcher */}
             {!PanelInteractionVars?.activeProject && (
                 <div className="absolute top-3 left-1/2 -translate-x-1/2 md:hidden z-50 flex flex-col items-center" ref={mobileDropdownRef}>
@@ -959,14 +1077,14 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             )}
 
             {/* Welcome Screen - Shows when no chat is started */}
-            {!isChatStarted && !PanelInteractionVars?.activePersona && (
+            {!isChatStarted && !PanelInteractionVars?.activePersona && !PanelInteractionVars?.isSideBySideMode && (
                 <div className="w-full max-w-2xl px-4 text-center z-10 flex-1 flex flex-col justify-center items-center">
                     <WelcomeScreen onSuggestionClick={setpromptInput} />
                 </div>
             )}
 
             {/* Persona Greeting Screen */}
-            {!isChatStarted && PanelInteractionVars?.activePersona && (
+            {!isChatStarted && PanelInteractionVars?.activePersona && !PanelInteractionVars?.isSideBySideMode && (
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -985,201 +1103,205 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             )}
 
             {/* Message Bubble Area */}
-            <motion.div
-                ref={scrollContainerRef}
-                onScroll={handleScroll}
-                style={{
-                    maskImage: 'linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent)',
-                    WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent)'
-                }}
-                animate={{
-                    flexGrow: isChatStarted ? 1 : 0,
-                    height: isChatStarted ? 'auto' : 0,
-                    opacity: isChatStarted ? 1 : 0
-                }}
-                transition={{
-                    type: "spring",
-                    stiffness: 260,
-                    damping: 35
-                }}
-                className="w-full md:w-[70%] px-4 md:px-0 pt-20 pb-4 md:py-4 overflow-y-auto scrollbar-hide"
-            >
-                {/* Skeleton Loader */}
-                {isLoadingHistory && (
-                    <div className="w-full space-y-4 px-4 py-6">
-                        {[1, 2, 3].map((i) => (
-                            <div key={i} className={`flex ${i % 2 === 0 ? 'justify-end' : 'justify-start'} w-full animate-pulse`}>
-                                <div className={`${i % 2 === 0 ? 'bg-secondary rounded-l-2xl rounded-tr-2xl' : 'bg-white/5 rounded-r-2xl rounded-tl-2xl'} p-4 w-2/3 space-y-3`}>
-                                    <div className="h-4 bg-white/10 rounded w-3/4"></div>
-                                    <div className="h-4 bg-white/10 rounded w-1/2"></div>
+            {PanelInteractionVars?.isSideBySideMode ? (
+                <SideBySideGrid streams={sideBySideStreams} isLoading={isStreaming} />
+            ) : (
+                <motion.div
+                    ref={scrollContainerRef}
+                    onScroll={handleScroll}
+                    style={{
+                        maskImage: 'linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent)',
+                        WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent)'
+                    }}
+                    animate={{
+                        flexGrow: isChatStarted ? 1 : 0,
+                        height: isChatStarted ? 'auto' : 0,
+                        opacity: isChatStarted ? 1 : 0
+                    }}
+                    transition={{
+                        type: "spring",
+                        stiffness: 260,
+                        damping: 35
+                    }}
+                    className="w-full md:w-[70%] px-4 md:px-0 pt-20 pb-4 md:py-4 overflow-y-auto scrollbar-hide"
+                >
+                    {/* Skeleton Loader */}
+                    {isLoadingHistory && (
+                        <div className="w-full space-y-4 px-4 py-6">
+                            {[1, 2, 3].map((i) => (
+                                <div key={i} className={`flex ${i % 2 === 0 ? 'justify-end' : 'justify-start'} w-full animate-pulse`}>
+                                    <div className={`${i % 2 === 0 ? 'bg-secondary rounded-l-2xl rounded-tr-2xl' : 'bg-white/5 rounded-r-2xl rounded-tl-2xl'} p-4 w-2/3 space-y-3`}>
+                                        <div className="h-4 bg-white/10 rounded w-3/4"></div>
+                                        <div className="h-4 bg-white/10 rounded w-1/2"></div>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                            ))}
+                        </div>
+                    )}
 
-                {/* Messages */}
-                {!isLoadingHistory && context.map((node, index) => {
-                    return (
-                        <div key={index} className="w-full max-w-4xl mx-auto mb-6 px-4">
-                            {node.role === 'system' && !node.content.includes("SEARCH RESULTS") && !node.content.includes("CURRENT WEATHER DATA") ? null : (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    className="w-full flex flex-col items-start gap-2"
-                                >
+                    {/* Messages */}
+                    {!isLoadingHistory && context.map((node, index) => {
+                        return (
+                            <div key={index} className="w-full max-w-4xl mx-auto mb-6 px-4">
+                                {node.role === 'system' && !node.content.includes("SEARCH RESULTS") && !node.content.includes("CURRENT WEATHER DATA") ? null : (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="w-full flex flex-col items-start gap-2"
+                                    >
 
-                                    {/* Render DeepMind progress */}
-                                    {node.role === "deepmind-progress" && (
-                                        <DeepMindProgress
-                                            phase={deepMindPhase}
-                                            phaseData={deepMindData}
-                                        />
-                                    )}
-
-                                    {/* Render separator for model changes */}
-                                    {node.role === "separator" && (
-                                        <div className="flex items-center gap-3 my-6 w-full">
-                                            <div className="flex-1 h-px bg-border"></div>
-                                            <span className="text-xs text-textLight px-3 py-1 rounded-full bg-tertiary border border-border">
-                                                {node.content}
-                                            </span>
-                                            <div className="flex-1 h-px bg-border"></div>
-                                        </div>
-                                    )}
-
-
-
-                                    {/* Weather Card - Full Width */}
-                                    {node.weatherData && (
-                                        <div className="w-full">
-                                            <WeatherCard data={node.weatherData} />
-                                        </div>
-                                    )}
-
-                                    {/* Search Status - Full Width */}
-                                    {node.searchStatus && (
-                                        <div className="w-full mb-2">
-                                            <SearchStatus
-                                                status={node.searchStatus}
-                                                logs={node.searchLogs || []}
-                                                sources={node.searchSources || []}
-                                                isAuto={node.isAutoSearch}
+                                        {/* Render DeepMind progress */}
+                                        {node.role === "deepmind-progress" && (
+                                            <DeepMindProgress
+                                                phase={deepMindPhase}
+                                                phaseData={deepMindData}
                                             />
-                                        </div>
-                                    )}
+                                        )}
 
-                                    {/* Image Generation Card */}
-                                    {node.generatedImage && (
-                                        <div className="w-full flex justify-start mb-4">
-                                            <div onClick={() => setPreviewImage(node.generatedImage.url)} className="cursor-pointer">
-                                                <ImageGenCard
-                                                    imageUrl={node.generatedImage.url}
-                                                    prompt={node.generatedImage.prompt}
+                                        {/* Render separator for model changes */}
+                                        {node.role === "separator" && (
+                                            <div className="flex items-center gap-3 my-6 w-full">
+                                                <div className="flex-1 h-px bg-border"></div>
+                                                <span className="text-xs text-textLight px-3 py-1 rounded-full bg-tertiary border border-border">
+                                                    {node.content}
+                                                </span>
+                                                <div className="flex-1 h-px bg-border"></div>
+                                            </div>
+                                        )}
+
+
+
+                                        {/* Weather Card - Full Width */}
+                                        {node.weatherData && (
+                                            <div className="w-full">
+                                                <WeatherCard data={node.weatherData} />
+                                            </div>
+                                        )}
+
+                                        {/* Search Status - Full Width */}
+                                        {node.searchStatus && (
+                                            <div className="w-full mb-2">
+                                                <SearchStatus
+                                                    status={node.searchStatus}
+                                                    logs={node.searchLogs || []}
+                                                    sources={node.searchSources || []}
+                                                    isAuto={node.isAutoSearch}
                                                 />
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
 
-                                    {/* Only show text bubble if it's NOT a system message with an image */}
-                                    {(!node.generatedImage || node.role === 'user') && (
-                                        <motion.div
-                                            className={`text-text p-4 rounded-2xl ${node.role?.toLowerCase() === "user"
-                                                ? 'bg-secondary ml-auto w-fit max-w-[80%]'
-                                                : 'mr-auto w-full'
-                                                }`}
-                                        >
-                                            {/* Attachment Preview (Moved Inside Bubble) */}
-                                            {node.attachment && (
-                                                <div className="mb-3 overflow-hidden rounded-xl bg-black/20 border border-white/5 w-full">
-                                                    {node.attachment.type.startsWith('image/') && node.attachment.content ? (
-                                                        <div
-                                                            className="relative group cursor-pointer"
-                                                            onClick={() => setPreviewImage(node.attachment.content)}
-                                                        >
-                                                            <img
-                                                                src={node.attachment.content}
-                                                                alt={node.attachment.name}
-                                                                className="w-full max-h-64 object-cover"
-                                                            />
-                                                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                <span className="text-xs text-white truncate block">{node.attachment.name}</span>
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <a
-                                                            href="#"
-                                                            onClick={(e) => {
-                                                                e.preventDefault();
-                                                                handleDownload(node.attachment.content, node.attachment.name);
-                                                            }}
-                                                            className="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/5 transition-colors"
-                                                        >
-                                                            <div className={`p-2 rounded-lg ${node.attachment.type.startsWith('image/') ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>
-                                                                {node.attachment.type.startsWith('image/') ? <ImageIcon size={20} /> : <FileText size={20} />}
-                                                            </div>
-                                                            <div className="flex flex-col overflow-hidden">
-                                                                <span className="text-sm font-medium text-text truncate">{node.attachment.name}</span>
-                                                                <span className="text-xs text-textLight uppercase">{node.attachment.type.split('/')[1] || 'FILE'}</span>
-                                                            </div>
-                                                        </a>
-                                                    )}
+                                        {/* Image Generation Card */}
+                                        {node.generatedImage && (
+                                            <div className="w-full flex justify-start mb-4">
+                                                <div onClick={() => setPreviewImage(node.generatedImage.url)} className="cursor-pointer">
+                                                    <ImageGenCard
+                                                        imageUrl={node.generatedImage.url}
+                                                        prompt={node.generatedImage.prompt}
+                                                    />
                                                 </div>
-                                            )}
-                                            {node.role?.toLowerCase() === "user" ? (
-                                                <p className="text-text whitespace-pre-wrap">{node.content}</p>
-                                            ) : (
-                                                <MarkdownRenderer
-                                                    content={node.content}
-                                                    streaming={node.streaming}
-                                                    sources={node.searchSources}
-                                                />
-                                            )}
+                                            </div>
+                                        )}
 
-                                            {/* Response Actions (Like, Dislike, Copy) for Assistant ONLY */}
-                                            {node.role === 'assistant' && !node.streaming && (
-                                                <div className="flex items-center gap-2 mt-3 px-1">
-                                                    <motion.button
-                                                        whileTap={{ scale: 0.8 }}
-                                                        transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                                                        onClick={() => handleFeedback(index, 'like')}
-                                                        className={`p-1.5 rounded-lg transition-colors ${node.feedback === 'like' ? 'text-green-400 bg-white/10' : 'text-textLight hover:text-white hover:bg-white/10'}`}
-                                                        title="Like"
-                                                    >
-                                                        <ThumbsUp size={14} fill={node.feedback === 'like' ? "currentColor" : "none"} />
-                                                    </motion.button>
-                                                    <motion.button
-                                                        whileTap={{ scale: 0.8 }}
-                                                        transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                                                        onClick={() => handleFeedback(index, 'dislike')}
-                                                        className={`p-1.5 rounded-lg transition-colors ${node.feedback === 'dislike' ? 'text-red-400 bg-white/10' : 'text-textLight hover:text-white hover:bg-white/10'}`}
-                                                        title="Dislike"
-                                                    >
-                                                        <ThumbsDown size={14} fill={node.feedback === 'dislike' ? "currentColor" : "none"} />
-                                                    </motion.button>
-                                                    <div className="ml-auto flex items-center">
-                                                        {copiedIndex === index && <span className="text-xs text-green-400 mr-2 animate-fade-in">Copied!</span>}
-                                                        <button
-                                                            className="p-1.5 text-textLight hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                                                            onClick={() => handleCopy(node.content, index)}
-                                                            title="Copy to clipboard"
-                                                        >
-                                                            {copiedIndex === index ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-                                                        </button>
+                                        {/* Only show text bubble if it's NOT a system message with an image */}
+                                        {(!node.generatedImage || node.role === 'user') && (
+                                            <motion.div
+                                                className={`text-text p-4 rounded-2xl ${node.role?.toLowerCase() === "user"
+                                                    ? 'bg-secondary ml-auto w-fit max-w-[80%]'
+                                                    : 'mr-auto w-full'
+                                                    }`}
+                                            >
+                                                {/* Attachment Preview (Moved Inside Bubble) */}
+                                                {node.attachment && (
+                                                    <div className="mb-3 overflow-hidden rounded-xl bg-black/20 border border-white/5 w-full">
+                                                        {node.attachment.type.startsWith('image/') && node.attachment.content ? (
+                                                            <div
+                                                                className="relative group cursor-pointer"
+                                                                onClick={() => setPreviewImage(node.attachment.content)}
+                                                            >
+                                                                <img
+                                                                    src={node.attachment.content}
+                                                                    alt={node.attachment.name}
+                                                                    className="w-full max-h-64 object-cover"
+                                                                />
+                                                                <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    <span className="text-xs text-white truncate block">{node.attachment.name}</span>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <a
+                                                                href="#"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    handleDownload(node.attachment.content, node.attachment.name);
+                                                                }}
+                                                                className="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/5 transition-colors"
+                                                            >
+                                                                <div className={`p-2 rounded-lg ${node.attachment.type.startsWith('image/') ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>
+                                                                    {node.attachment.type.startsWith('image/') ? <ImageIcon size={20} /> : <FileText size={20} />}
+                                                                </div>
+                                                                <div className="flex flex-col overflow-hidden">
+                                                                    <span className="text-sm font-medium text-text truncate">{node.attachment.name}</span>
+                                                                    <span className="text-xs text-textLight uppercase">{node.attachment.type.split('/')[1] || 'FILE'}</span>
+                                                                </div>
+                                                            </a>
+                                                        )}
                                                     </div>
-                                                </div>
-                                            )}
-                                        </motion.div>
-                                    )}
-                                </motion.div>
-                            )}
-                        </div>
-                    )
-                })}
-                <div ref={messagesEndRef} />
+                                                )}
+                                                {node.role?.toLowerCase() === "user" ? (
+                                                    <p className="text-text whitespace-pre-wrap">{node.content}</p>
+                                                ) : (
+                                                    <MarkdownRenderer
+                                                        content={node.content}
+                                                        streaming={node.streaming}
+                                                        sources={node.searchSources}
+                                                    />
+                                                )}
+
+                                                {/* Response Actions (Like, Dislike, Copy) for Assistant ONLY */}
+                                                {node.role === 'assistant' && !node.streaming && (
+                                                    <div className="flex items-center gap-2 mt-3 px-1">
+                                                        <motion.button
+                                                            whileTap={{ scale: 0.8 }}
+                                                            transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                                                            onClick={() => handleFeedback(index, 'like')}
+                                                            className={`p-1.5 rounded-lg transition-colors ${node.feedback === 'like' ? 'text-green-400 bg-white/10' : 'text-textLight hover:text-white hover:bg-white/10'}`}
+                                                            title="Like"
+                                                        >
+                                                            <ThumbsUp size={14} fill={node.feedback === 'like' ? "currentColor" : "none"} />
+                                                        </motion.button>
+                                                        <motion.button
+                                                            whileTap={{ scale: 0.8 }}
+                                                            transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                                                            onClick={() => handleFeedback(index, 'dislike')}
+                                                            className={`p-1.5 rounded-lg transition-colors ${node.feedback === 'dislike' ? 'text-red-400 bg-white/10' : 'text-textLight hover:text-white hover:bg-white/10'}`}
+                                                            title="Dislike"
+                                                        >
+                                                            <ThumbsDown size={14} fill={node.feedback === 'dislike' ? "currentColor" : "none"} />
+                                                        </motion.button>
+                                                        <div className="ml-auto flex items-center">
+                                                            {copiedIndex === index && <span className="text-xs text-green-400 mr-2 animate-fade-in">Copied!</span>}
+                                                            <button
+                                                                className="p-1.5 text-textLight hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                                                                onClick={() => handleCopy(node.content, index)}
+                                                                title="Copy to clipboard"
+                                                            >
+                                                                {copiedIndex === index ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </motion.div>
+                                        )}
+                                    </motion.div>
+                                )}
+                            </div>
+                        )
+                    })}
+                    <div ref={messagesEndRef} />
 
 
-            </motion.div>
+                </motion.div>
+            )}
 
 
 

@@ -87,7 +87,7 @@ function LandingPage() {
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
                             </span>
-                            v3.0.1 Now Available with AI Personas & NSFW Detection
+                            v3.0.2 Now Available with Side-by-Side Mode & Decommissioned Models Fixed
                         </motion.div>
                     </Link>
 
