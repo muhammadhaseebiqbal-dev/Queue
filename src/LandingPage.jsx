@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Sparkles, Zap, Brain, MessageSquare, Layers, Command } from "lucide-react";
 import { Helmet } from "react-helmet-async";
@@ -103,12 +102,7 @@ function LandingPage() {
 
                 <div className="max-w-4xl mx-auto text-center relative z-10">
                     <Link to="/changelog">
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.5 }}
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
+                        <div
                             className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-400 text-xs font-medium mb-8 cursor-pointer hover:bg-white/10 transition-colors"
                         >
                             <span className="relative flex h-2 w-2">
@@ -116,34 +110,25 @@ function LandingPage() {
                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
                             </span>
                             v2.5.1 Now Available with PWA & SEO
-                        </motion.div>
+                        </div>
                     </Link>
 
-                    <motion.h1
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.5, delay: 0.1 }}
+                    <h1
                         className="text-5xl md:text-7xl font-bold tracking-tight mb-8"
                     >
                         Free AI Workspace for<br />
                         <span className="text-zinc-500">
                             Students & Developers
                         </span>
-                    </motion.h1>
+                    </h1>
 
-                    <motion.p
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.5, delay: 0.2 }}
+                    <p
                         className="text-lg md:text-xl text-zinc-400 mb-10 max-w-2xl mx-auto leading-relaxed"
                     >
                         Orchestrate multiple AI models, manage projects, and analyze complex data with a powerful, chat-based operating system.
-                    </motion.p>
+                    </p>
 
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.5, delay: 0.3 }}
+                    <div
                         className="flex flex-col sm:flex-row items-center justify-center gap-4"
                     >
                         <Link
@@ -156,7 +141,7 @@ function LandingPage() {
                         <Link to="/changelog" className="px-8 py-4 bg-white/5 text-white font-semibold rounded-2xl hover:bg-white/10 border border-white/10 transition-all w-full sm:w-auto text-center">
                             View Changelog
                         </Link>
-                    </motion.div>
+                    </div>
                 </div>
             </section>
 
@@ -415,8 +400,7 @@ function LandingPage() {
 
 function FeatureCard({ icon, title, description, className = "", image }) {
     return (
-        <motion.div
-            whileHover={{ y: -5 }}
+        <div
             className={`relative group overflow-hidden bg-zinc-900/50 border border-white/5 rounded-3xl p-10 hover:border-indigo-500/30 transition-colors ${className}`}
         >
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -439,7 +423,7 @@ function FeatureCard({ icon, title, description, className = "", image }) {
                     </div>
                 )}
             </div>
-        </motion.div>
+        </div>
     )
 }
 export default LandingPage;

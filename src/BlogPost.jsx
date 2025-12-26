@@ -2,7 +2,6 @@ import { useParams, Link, Navigate } from "react-router-dom";
 import { ArrowLeft, Calendar, User, Clock } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { blogPosts } from "./data/blogPosts";
-import { motion } from "framer-motion";
 import { Helmet } from "react-helmet-async";
 
 function BlogPost() {
@@ -62,9 +61,7 @@ function BlogPost() {
             </div>
 
             {/* Content */}
-            <motion.article
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
+            <article
                 className="pt-32 pb-20 px-6 max-w-3xl mx-auto"
             >
                 {/* Meta */}
@@ -88,7 +85,7 @@ function BlogPost() {
                         Try QueueAI Now
                     </Link>
                 </div>
-            </motion.article>
+            </article>
         </div>
     );
 }

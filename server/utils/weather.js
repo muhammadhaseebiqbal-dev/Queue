@@ -1,8 +1,5 @@
 import axios from 'axios';
 
-// Get current date string YYYY-MM-DD
-const getToday = () => new Date().toISOString().split('T')[0];
-
 export async function getWeatherData(locationQuery) {
     try {
         console.log(`[Weather] Fetching data for: ${locationQuery}`);

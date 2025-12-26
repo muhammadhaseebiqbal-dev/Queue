@@ -1,4 +1,4 @@
-import { Brain, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { Brain, ChevronDown, Loader2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -7,9 +7,11 @@ function ThinkingBlock({ content, streaming = false }) {
 
     // Auto-expand when streaming starts
     useEffect(() => {
+        let timeoutId;
         if (streaming) {
-            setIsExpanded(true)
+            timeoutId = setTimeout(() => setIsExpanded(true), 0);
         }
+        return () => clearTimeout(timeoutId);
     }, [streaming])
 
     return (

@@ -8,7 +8,7 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
     const [activeSection, setActiveSection] = useState('chats')
     const [projects, setProjects] = useState([])
     const [chats, setChats] = useState([]) // Sessions
-    const [connectors, setConnectors] = useState([
+    const [connectors] = useState([
         { id: 1, name: 'Google Drive', status: 'disconnected' },
         { id: 2, name: 'GitHub', status: 'disconnected' }
     ])
@@ -48,6 +48,7 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
         if (isPanelExpanded) {
             fetchData();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isPanelExpanded, PanelInteractionVars.sidebarRefreshKey]);
 
     const handleNewChat = () => {
