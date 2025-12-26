@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://queueai.com/</loc>
+    <loc>https://queueai.app/</loc>
     <lastmod>2024-12-26</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://queueai.com/signin</loc>
+    <loc>https://queueai.app/signin</loc>
     <lastmod>2024-12-26</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://queueai.com/changelog</loc>
+    <loc>https://queueai.app/changelog</loc>
     <lastmod>2024-12-26</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>

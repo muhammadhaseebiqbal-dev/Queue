@@ -17,19 +17,19 @@ function LandingPage() {
 
                 {/* Open Graph / Facebook */}
                 <meta property="og:type" content="website" />
-                <meta property="og:url" content="https://queueai.com/" />
+                <meta property="og:url" content="https://queueai.app/" />
                 <meta property="og:title" content="QueueAI - The Ultimate Multi-Model AI Workspace" />
                 <meta property="og:description" content="Chat with specialised AI personas, use multiple models (GPT, Llama, Qwen), and keep your context forever. The workspace for power users." />
-                <meta property="og:image" content="https://queueai.com/og-image.jpg" />
+                <meta property="og:image" content="https://queueai.app/og-image.jpg" />
 
                 {/* Twitter */}
                 <meta property="twitter:card" content="summary_large_image" />
-                <meta property="twitter:url" content="https://queueai.com/" />
+                <meta property="twitter:url" content="https://queueai.app/" />
                 <meta property="twitter:title" content="QueueAI - The Ultimate Multi-Model AI Workspace" />
                 <meta property="twitter:description" content="Chat with specialised AI personas, use multiple models (GPT, Llama, Qwen), and keep your context forever." />
-                <meta property="twitter:image" content="https://queueai.com/og-image.jpg" />
+                <meta property="twitter:image" content="https://queueai.app/og-image.jpg" />
 
-                <link rel="canonical" href="https://queueai.com/" />
+                <link rel="canonical" href="https://queueai.app/" />
             </Helmet>
 
             {/* Floating Navbar (Mobbin Style) */}
