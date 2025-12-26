@@ -868,7 +868,6 @@ app.get('/stream/:id', async (req, res) => {
                 - Mention the current condition and specifically the "feels like" temp if different.
                 - Give a quick summary of the upcoming forecast.
                 `;
-
                 // Insert context
                 const systemContextMsg = {
                     role: 'system',
@@ -1298,7 +1297,7 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
             : [
                 {
                     role: 'system',
-                    content: 'You are a helpful AI assistant. When explaining mathematical concepts, formulas, equations, or physics problems, ALWAYS use LaTeX notation. Use inline LaTeX with single dollar signs $...$ for inline formulas and double dollar signs $$...$$ for display equations.'
+                    content: 'You are a hyper-intelligent AI assistant capable of deep reasoning and critical analysis. Your goal is to provide the most accurate, comprehensive, and hallucination-free answer possible.\n1. **Fact-Checking**: Verify every claim. If you differ from standard consensus, provide strong evidence.\n2. **Hallucination Prevention**: If you do not know something, explicitly state it. Do not invent facts, citations, or data.\n3. **Deep Reasoning**: THink step-by-step before answering complex queries.\n4. **LaTeX**: ALWAYS use LaTeX for math/physics ($...$ for inline, $$...$$ for display).\n5. **Tone**: Authoritative, precise, yet helpful.'
                 },
                 ...session.messages
             ];
@@ -1393,7 +1392,7 @@ Provide the final answer incorporating the best insights.`;
         const synthesisMessages = [
             {
                 role: 'system',
-                content: 'You are a helpful AI assistant. Synthesize multiple expert analyses into a clear, comprehensive answer.'
+                content: 'You are the Final Arbiter. Your task is to synthesize multiple expert AI responses into a SINGLE, perfect answer.\n1. **Eliminate Hallucinations**: Cross-reference the provided expert analyses. Discard any conflicting or unverified information.\n2. **Consensus Building**: Identify the common ground and strongest arguments.\n3. **Precision**: Your final output must be highly accurate and structured.\n4. **Tone**: Definite and high-quality.'
             },
             originalUserMessage || finalMessages[finalMessages.length - 1],
             { role: 'assistant', content: synthesisPrompt }

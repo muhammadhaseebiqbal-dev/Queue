@@ -14,7 +14,7 @@ function MarkdownRenderer({ content, streaming = false, sources = [] }) {
     // Regex matches [1], [2], etc.
     // 1. Pre-process content to linkify citations like [1], [1†source], 【1†source】
     // Regex matches [1], [1†source], etc.
-    const processedContent = content
+    const processedContent = (content || '')
         // Linkify citations
         .replace(/(?:\[|【)(\d+)(?:†.*?)?(?:\]|】)/g, (match, id) => {
             const sourceIndex = parseInt(id) - 1;

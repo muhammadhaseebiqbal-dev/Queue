@@ -5,7 +5,7 @@ import axios from "axios"
 
 import { API_URL } from "../../config"
 
-function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, toggleDeepMind, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment, activeProject, handleSend }) {
+function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, toggleDeepMind, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment, activeProject, handleSend, isStreaming, stopGeneration, className }) {
 
     const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
     const dropdownRef = useRef(null)
@@ -182,7 +182,7 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
     };
 
     return (
-        <div className="bg-secondary border-2 border-border w-[95%] md:w-[70%] min-h-[110px] rounded-2xl p-1.5 flex flex-col justify-between relative">
+        <div className={`bg-secondary border-2 border-border min-h-[110px] rounded-2xl p-1.5 flex flex-col justify-between relative ${className || 'w-[95%] md:w-[70%]'}`}>
 
             {/* Hidden File Input */}
             <input
@@ -408,11 +408,16 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                         </div>
                     )}
                     <button
-                        onClick={toggleChatStatus}
-                        className={`w-11 h-11 rounded-2xl flex justify-center items-center transition-all ${isChatStarted || promptInput || attachment ? 'bg-white text-black' : 'bg-tertiary text-textLight cursor-not-allowed'
+                        onClick={isStreaming ? stopGeneration : toggleChatStatus}
+                        className={`w-11 h-11 rounded-2xl flex justify-center items-center transition-all ${isStreaming
+                            ? 'bg-red-500 hover:bg-red-600 text-white'
+                            : isChatStarted || promptInput || attachment
+                                ? 'bg-white text-black'
+                                : 'bg-tertiary text-textLight cursor-not-allowed'
                             }`}
+                        disabled={!isStreaming && !isChatStarted && !promptInput && !attachment}
                     >
-                        <Send size={20} />
+                        {isStreaming ? <Square size={18} fill="currentColor" /> : <Send size={20} />}
                     </button>
                 </div>
             </div>

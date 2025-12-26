@@ -13,9 +13,12 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
         { id: 2, name: 'GitHub', status: 'disconnected' }
     ])
 
+    const [isLoading, setIsLoading] = useState(false)
+
     // Fetch Sidebar Data
     useEffect(() => {
         const fetchData = async () => {
+            setIsLoading(true);
             try {
                 // Get userId from props
                 const userId = PanelInteractionVars.userId;
@@ -42,6 +45,8 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
 
             } catch (error) {
                 console.error("Error fetching sidebar data:", error);
+            } finally {
+                setIsLoading(false);
             }
         }
 
@@ -208,31 +213,46 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                                     variants={tabVariants}
                                     className="p-2 space-y-1 absolute w-full"
                                 >
-                                    {chats.map((chat) => (
-                                        <div
-                                            key={chat.id}
-                                            onClick={() => {
-                                                PanelInteractionVars.setActiveSessionId(chat.id);
-                                                PanelInteractionVars.setActiveProject?.(null); // Clear project for regular chats
-                                            }}
-                                            className={`w-full p-3 rounded-xl transition-colors flex items-start gap-2 group cursor-pointer ${PanelInteractionVars?.activeSessionId === chat.id && !PanelInteractionVars?.activeProject
-                                                ? 'bg-[#1a1a1a]' // Dark solid background for active chat
-                                                : 'hover:bg-tertiary'
-                                                }`}
-                                        >
-                                            <MessageSquare size={16} className="text-textLight mt-1 flex-shrink-0" />
-                                            <div className="flex-1 text-left overflow-hidden">
-                                                <p className="text-sm text-text truncate font-medium">{chat.title}</p>
-                                                <p className="text-xs text-textLight mt-1">{chat.timestamp}</p>
-                                            </div>
-                                            <button
-                                                onClick={(e) => handleDeleteChat(chat.id, e)}
-                                                className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                            >
-                                                <Trash2 size={14} className="text-textLight hover:text-red-400" />
-                                            </button>
+                                    {isLoading ? (
+                                        // Skeleton Loader for Chat History
+                                        <div className="space-y-4 px-2 py-3">
+                                            {[1, 2, 3, 4, 5].map((i) => (
+                                                <div key={i} className="flex gap-3 animate-pulse">
+                                                    <div className="w-4 h-4 rounded-full bg-white/10 shrink-0 mt-1"></div>
+                                                    <div className="flex-1 space-y-2">
+                                                        <div className="w-3/4 h-3 rounded bg-white/10"></div>
+                                                        <div className="w-1/2 h-2 rounded bg-white/5"></div>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
+                                    ) : (
+                                        chats.map((chat) => (
+                                            <div
+                                                key={chat.id}
+                                                onClick={() => {
+                                                    PanelInteractionVars.setActiveSessionId(chat.id);
+                                                    PanelInteractionVars.setActiveProject?.(null); // Clear project for regular chats
+                                                }}
+                                                className={`w-full p-3 rounded-xl transition-colors flex items-start gap-2 group cursor-pointer ${PanelInteractionVars?.activeSessionId === chat.id && !PanelInteractionVars?.activeProject
+                                                    ? 'bg-[#1a1a1a]' // Dark solid background for active chat
+                                                    : 'hover:bg-tertiary'
+                                                    }`}
+                                            >
+                                                <MessageSquare size={16} className="text-textLight mt-1 flex-shrink-0" />
+                                                <div className="flex-1 text-left overflow-hidden">
+                                                    <p className="text-sm text-text truncate font-medium">{chat.title}</p>
+                                                    <p className="text-xs text-textLight mt-1">{chat.timestamp}</p>
+                                                </div>
+                                                <button
+                                                    onClick={(e) => handleDeleteChat(chat.id, e)}
+                                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                                >
+                                                    <Trash2 size={14} className="text-textLight hover:text-red-400" />
+                                                </button>
+                                            </div>
+                                        ))
+                                    )}
                                 </motion.div>
                             )}
 

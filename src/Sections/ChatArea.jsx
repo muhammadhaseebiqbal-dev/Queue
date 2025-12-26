@@ -26,6 +26,8 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     const [deepMindPhase, setDeepMindPhase] = useState(0)
     const [deepMindData, setDeepMindData] = useState({})
     const [isMobileModelDropdownOpen, setIsMobileModelDropdownOpen] = useState(false)
+    const [showScrollButton, setShowScrollButton] = useState(false)
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false)
 
     const models = [
         { id: 'gpt-oss-120b', name: 'GPT-OSS 120B', Icon: Bot },
@@ -119,6 +121,19 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
         setIsChatStarted(false);
 
         const loadSession = async () => {
+            const currentSessionId = PanelInteractionVars?.activeSessionId;
+
+            if (!currentSessionId) {
+                console.log('[Load] No session ID, clearing context');
+                setcontext([]);
+                setIsChatStarted(false);
+                setIsLoadingHistory(false);
+                return;
+            }
+
+            console.log('[Load] Loading session:', currentSessionId);
+            setIsLoadingHistory(true); // Show skeleton
+
             if (currentSessionId) {
                 // Load existing session
                 try {
@@ -134,7 +149,8 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                             type: msg.type,
                             model: msg.model,
                             mode: msg.mode,
-                            attachment: msg.attachment
+                            attachment: msg.attachment,
+                            feedback: msg.feedback
                         }));
 
                         console.log(`[ChatArea] Loaded ${formattedMessages.length} messages for session ${currentSessionId}`);
@@ -153,6 +169,8 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     }
                 } catch (error) {
                     console.error('[ChatArea] Failed to load session:', error);
+                } finally {
+                    setIsLoadingHistory(false); // Hide skeleton
                 }
             } else {
                 // Reset for new chat
@@ -162,6 +180,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 setpromptInput('');
                 setDeepMindPhase(0);
                 setDeepMindData({});
+                setIsLoadingHistory(false);
 
                 // Reset backend state
                 axios.post(`${API_URL}/api/session/reset`, { userId })
@@ -204,6 +223,15 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
         // If user is within 100px of bottom, auto-scroll is enabled
         const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
         shouldAutoScrollRef.current = isAtBottom;
+        setShowScrollButton(!isAtBottom); // Show button when not at bottom
+    }
+
+    // Scroll to bottom function
+    const scrollToBottom = () => {
+        scrollContainerRef.current?.scrollTo({
+            top: scrollContainerRef.current.scrollHeight,
+            behavior: 'smooth'
+        });
     }
 
     // Auto-scroll logic
@@ -382,7 +410,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     // Mark final message as complete but keep progress indicator
                     setcontext(prev => {
                         const updated = [...prev];
-                        if (updated.length > 0 && updated[updated.length - 1].role === 'system') {
+                        if (updated.length > 0 && updated[updated.length - 1].role === 'assistant') {
                             updated[updated.length - 1].streaming = false;
                         }
                         // Mark progress as complete
@@ -852,90 +880,99 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 }}
                 className="w-full md:w-[70%] px-4 md:px-0 pt-20 pb-4 md:py-4 overflow-y-auto scrollbar-hide"
             >
-                {
-                    context.map((node, index) => {
-                        // Render DeepMind progress
-                        if (node.role === "deepmind-progress") {
-                            return (
-                                <DeepMindProgress
-                                    key={index}
-                                    phase={deepMindPhase}
-                                    phaseData={deepMindData}
-                                />
-                            )
-                        }
-
-                        // Render separator for model changes
-                        if (node.role === "separator") {
-                            return (
-                                <div key={index} className="flex items-center gap-3 my-6 w-full">
-                                    <div className="flex-1 h-px bg-border"></div>
-                                    <span className="text-xs text-textLight px-3 py-1 rounded-full bg-tertiary border border-border">
-                                        {node.content}
-                                    </span>
-                                    <div className="flex-1 h-px bg-border"></div>
+                {/* Skeleton Loader */}
+                {isLoadingHistory && (
+                    <div className="w-full space-y-4 px-4 py-6">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className={`flex ${i % 2 === 0 ? 'justify-end' : 'justify-start'} w-full animate-pulse`}>
+                                <div className={`${i % 2 === 0 ? 'bg-secondary rounded-l-2xl rounded-tr-2xl' : 'bg-white/5 rounded-r-2xl rounded-tl-2xl'} p-4 w-2/3 space-y-3`}>
+                                    <div className="h-4 bg-white/10 rounded w-3/4"></div>
+                                    <div className="h-4 bg-white/10 rounded w-1/2"></div>
                                 </div>
-                            )
-                        }
+                            </div>
+                        ))}
+                    </div>
+                )}
 
-                        // Render regular messages
-                        // Render regular messages
-                        return (
-                            <div key={index} className="flex flex-col w-full mb-4">
-                                {/* Attachment Card */}
-                                {/* Attachment Card */}
-                                {node.attachment && (
-                                    <div className="flex justify-end mb-2">
-                                        <div className="overflow-hidden rounded-xl bg-secondary/50 border border-white/10 w-fit max-w-[80%]">
-                                            {node.attachment.type.startsWith('image/') && node.attachment.content ? (
-                                                <div
-                                                    className="relative group cursor-pointer"
-                                                    onClick={() => setPreviewImage(node.attachment.content)}
-                                                >
-                                                    <img
-                                                        src={node.attachment.content}
-                                                        alt={node.attachment.name}
-                                                        className="max-w-xs max-h-64 object-cover rounded-t-xl"
-                                                    />
-                                                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <span className="text-xs text-white truncate block">{node.attachment.name}</span>
-                                                    </div>
-                                                </div>
-                                            ) : (
+                {/* Messages */}
+                {!isLoadingHistory && context.map((node, index) => {
+                    return (
+                        <div key={index} className="w-full max-w-4xl mx-auto mb-6 px-4">
+                            {node.role === 'system' && !node.content.includes("SEARCH RESULTS") && !node.content.includes("CURRENT WEATHER DATA") ? null : (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="w-full flex flex-col items-start gap-2"
+                                >
 
-                                                <a
-                                                    href="#"
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        handleDownload(node.attachment.content, node.attachment.name);
-                                                    }}
-                                                    className="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/5 transition-colors"
-                                                >
-                                                    <div className={`p-2 rounded-lg ${node.attachment.type.startsWith('image/') ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>
-                                                        {node.attachment.type.startsWith('image/') ? <ImageIcon size={20} /> : <FileText size={20} />}
-                                                    </div>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-sm font-medium text-text">{node.attachment.name}</span>
-                                                        <span className="text-xs text-textLight uppercase">{node.attachment.type.split('/')[1] || 'FILE'}</span>
-                                                    </div>
-                                                </a>
-                                            )}
+                                    {/* Render DeepMind progress */}
+                                    {node.role === "deepmind-progress" && (
+                                        <DeepMindProgress
+                                            phase={deepMindPhase}
+                                            phaseData={deepMindData}
+                                        />
+                                    )}
+
+                                    {/* Render separator for model changes */}
+                                    {node.role === "separator" && (
+                                        <div className="flex items-center gap-3 my-6 w-full">
+                                            <div className="flex-1 h-px bg-border"></div>
+                                            <span className="text-xs text-textLight px-3 py-1 rounded-full bg-tertiary border border-border">
+                                                {node.content}
+                                            </span>
+                                            <div className="flex-1 h-px bg-border"></div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
 
-                                {/* Weather Card - Full Width */}
-                                {
-                                    node.weatherData && (
+                                    {/* Attachment Card */}
+                                    {node.attachment && (
+                                        <div className="flex justify-end mb-2">
+                                            <div className="overflow-hidden rounded-xl bg-secondary/50 border border-white/10 w-fit max-w-[80%]">
+                                                {node.attachment.type.startsWith('image/') && node.attachment.content ? (
+                                                    <div
+                                                        className="relative group cursor-pointer"
+                                                        onClick={() => setPreviewImage(node.attachment.content)}
+                                                    >
+                                                        <img
+                                                            src={node.attachment.content}
+                                                            alt={node.attachment.name}
+                                                            className="max-w-xs max-h-64 object-cover rounded-t-xl"
+                                                        />
+                                                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <span className="text-xs text-white truncate block">{node.attachment.name}</span>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <a
+                                                        href="#"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            handleDownload(node.attachment.content, node.attachment.name);
+                                                        }}
+                                                        className="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/5 transition-colors"
+                                                    >
+                                                        <div className={`p-2 rounded-lg ${node.attachment.type.startsWith('image/') ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>
+                                                            {node.attachment.type.startsWith('image/') ? <ImageIcon size={20} /> : <FileText size={20} />}
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-medium text-text">{node.attachment.name}</span>
+                                                            <span className="text-xs text-textLight uppercase">{node.attachment.type.split('/')[1] || 'FILE'}</span>
+                                                        </div>
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Weather Card - Full Width */}
+                                    {node.weatherData && (
                                         <div className="w-full">
                                             <WeatherCard data={node.weatherData} />
                                         </div>
-                                    )
-                                }
+                                    )}
 
-                                {/* Search Status - Full Width */}
-                                {
-                                    node.searchStatus && (
+                                    {/* Search Status - Full Width */}
+                                    {node.searchStatus && (
                                         <div className="w-full mb-2">
                                             <SearchStatus
                                                 status={node.searchStatus}
@@ -944,12 +981,10 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                                 isAuto={node.isAutoSearch}
                                             />
                                         </div>
-                                    )
-                                }
+                                    )}
 
-                                {/* Image Generation Card */}
-                                {
-                                    node.generatedImage && (
+                                    {/* Image Generation Card */}
+                                    {node.generatedImage && (
                                         <div className="w-full flex justify-start mb-4">
                                             <div onClick={() => setPreviewImage(node.generatedImage.url)} className="cursor-pointer">
                                                 <ImageGenCard
@@ -958,91 +993,123 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                                 />
                                             </div>
                                         </div>
-                                    )
-                                }
+                                    )}
 
-                                {/* Only show text bubble if it's NOT a system message with an image */}
-                                {(!node.generatedImage || node.role === 'user') && (
-                                    <motion.div
-                                        className={`text-text p-4 rounded-2xl ${node.role?.toLowerCase() === "user"
-                                            ? 'bg-secondary ml-auto w-fit max-w-[80%]'
-                                            : 'mr-auto w-full'
-                                            }`}
-                                    >
-                                        {node.role?.toLowerCase() === "user" ? (
-                                            <p className="text-text whitespace-pre-wrap">{node.content}</p>
-                                        ) : (
-                                            <MarkdownRenderer
-                                                content={node.content}
-                                                streaming={node.streaming}
-                                                sources={node.searchSources}
-                                            />
-                                        )}
+                                    {/* Only show text bubble if it's NOT a system message with an image */}
+                                    {(!node.generatedImage || node.role === 'user') && (
+                                        <motion.div
+                                            className={`text-text p-4 rounded-2xl ${node.role?.toLowerCase() === "user"
+                                                ? 'bg-secondary ml-auto w-fit max-w-[80%]'
+                                                : 'mr-auto w-full'
+                                                }`}
+                                        >
+                                            {node.role?.toLowerCase() === "user" ? (
+                                                <p className="text-text whitespace-pre-wrap">{node.content}</p>
+                                            ) : (
+                                                <MarkdownRenderer
+                                                    content={node.content}
+                                                    streaming={node.streaming}
+                                                    sources={node.searchSources}
+                                                />
+                                            )}
 
-                                        {/* Response Actions (Like, Dislike, Copy) for Assistant ONLY */}
-                                        {node.role === 'assistant' && !node.streaming && (
-                                            <div className="flex items-center gap-2 mt-3 px-1">
-                                                <motion.button
-                                                    whileTap={{ scale: 0.8 }}
-                                                    transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                                                    onClick={() => handleFeedback(index, 'like')}
-                                                    className={`p-1.5 rounded-lg transition-colors ${node.feedback === 'like' ? 'text-green-400 bg-white/10' : 'text-textLight hover:text-white hover:bg-white/10'}`}
-                                                    title="Like"
-                                                >
-                                                    <ThumbsUp size={14} fill={node.feedback === 'like' ? "currentColor" : "none"} />
-                                                </motion.button>
-                                                <motion.button
-                                                    whileTap={{ scale: 0.8 }}
-                                                    transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                                                    onClick={() => handleFeedback(index, 'dislike')}
-                                                    className={`p-1.5 rounded-lg transition-colors ${node.feedback === 'dislike' ? 'text-red-400 bg-white/10' : 'text-textLight hover:text-white hover:bg-white/10'}`}
-                                                    title="Dislike"
-                                                >
-                                                    <ThumbsDown size={14} fill={node.feedback === 'dislike' ? "currentColor" : "none"} />
-                                                </motion.button>
-                                                <div className="ml-auto flex items-center">
-                                                    {copiedIndex === index && <span className="text-xs text-green-400 mr-2 animate-fade-in">Copied!</span>}
-                                                    <button
-                                                        className="p-1.5 text-textLight hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                                                        onClick={() => handleCopy(node.content, index)}
-                                                        title="Copy to clipboard"
+                                            {/* Response Actions (Like, Dislike, Copy) for Assistant ONLY */}
+                                            {node.role === 'assistant' && !node.streaming && (
+                                                <div className="flex items-center gap-2 mt-3 px-1">
+                                                    <motion.button
+                                                        whileTap={{ scale: 0.8 }}
+                                                        transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                                                        onClick={() => handleFeedback(index, 'like')}
+                                                        className={`p-1.5 rounded-lg transition-colors ${node.feedback === 'like' ? 'text-green-400 bg-white/10' : 'text-textLight hover:text-white hover:bg-white/10'}`}
+                                                        title="Like"
                                                     >
-                                                        {copiedIndex === index ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-                                                    </button>
+                                                        <ThumbsUp size={14} fill={node.feedback === 'like' ? "currentColor" : "none"} />
+                                                    </motion.button>
+                                                    <motion.button
+                                                        whileTap={{ scale: 0.8 }}
+                                                        transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                                                        onClick={() => handleFeedback(index, 'dislike')}
+                                                        className={`p-1.5 rounded-lg transition-colors ${node.feedback === 'dislike' ? 'text-red-400 bg-white/10' : 'text-textLight hover:text-white hover:bg-white/10'}`}
+                                                        title="Dislike"
+                                                    >
+                                                        <ThumbsDown size={14} fill={node.feedback === 'dislike' ? "currentColor" : "none"} />
+                                                    </motion.button>
+                                                    <div className="ml-auto flex items-center">
+                                                        {copiedIndex === index && <span className="text-xs text-green-400 mr-2 animate-fade-in">Copied!</span>}
+                                                        <button
+                                                            className="p-1.5 text-textLight hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                                                            onClick={() => handleCopy(node.content, index)}
+                                                            title="Copy to clipboard"
+                                                        >
+                                                            {copiedIndex === index ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        )}
-                                    </motion.div>
-                                )}
-                            </div>
-                        )
-                    })
-                }
+                                            )}
+                                        </motion.div>
+                                    )}
+                                </motion.div>
+                            )}
+                        </div>
+                    )
+                })}
                 <div ref={messagesEndRef} />
+
+
             </motion.div>
+
+
 
             {/* Input Area */}
             <motion.div
                 layout
                 className="w-full flex justify-center items-center pb-6 pt-2 shrink-0 z-10"
             >
-                <AiInput
-                    promptInput={promptInput}
-                    setpromptInput={setpromptInput}
-                    handleSend={completeQuery}
-                    isDeepMindEnabled={isDeepMindEnabled}
-                    toggleDeepMind={() => setIsDeepMindEnabled(!isDeepMindEnabled)}
-                    isWebSearchEnabled={isWebSearchEnabled}
-                    setIsWebSearchEnabled={setIsWebSearchEnabled}
-                    selectedModel={selectedModel}
-                    setSelectedModel={setSelectedModel}
-                    isChatStarted={isChatStarted}
-                    isStreaming={isStreaming}
-                    stopRecording={() => eventSourceRef.current?.close()}
-                    attachment={attachment}
-                    setAttachment={setAttachment}
-                    activeProject={PanelInteractionVars?.activeProject}
-                />
+                <div className="w-[95%] md:w-[70%] relative flex flex-col">
+                    <AnimatePresence>
+                        {showScrollButton && (
+                            <motion.button
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.8 }}
+                                onClick={scrollToBottom}
+                                className="absolute bottom-full mb-3 right-0 p-2.5 bg-tertiary/90 backdrop-blur-xl border border-white/10 text-text rounded-full shadow-lg hover:bg-white/10 transition-colors z-20 group"
+                            >
+                                {isStreaming ? (
+                                    <img src="/anim.gif" alt="Generating" className="w-5 h-5 rounded-full object-cover" />
+                                ) : (
+                                    <ChevronDown size={18} className="group-hover:translate-y-0.5 transition-transform" />
+                                )}
+                            </motion.button>
+                        )}
+                    </AnimatePresence>
+                    <AiInput
+                        promptInput={promptInput}
+                        setpromptInput={setpromptInput}
+                        handleSend={completeQuery}
+                        isDeepMindEnabled={isDeepMindEnabled}
+                        toggleDeepMind={() => setIsDeepMindEnabled(!isDeepMindEnabled)}
+                        isWebSearchEnabled={isWebSearchEnabled}
+                        setIsWebSearchEnabled={setIsWebSearchEnabled}
+                        selectedModel={selectedModel}
+                        setSelectedModel={setSelectedModel}
+                        isChatStarted={isChatStarted}
+                        isStreaming={isStreaming}
+                        stopGeneration={() => {
+                            if (eventSourceRef.current) eventSourceRef.current.close();
+                            setIsStreaming(false);
+                            setcontext(prev => {
+                                const updated = [...prev];
+                                if (updated.length > 0) updated[updated.length - 1].streaming = false;
+                                return updated;
+                            });
+                        }}
+                        attachment={attachment}
+                        setAttachment={setAttachment}
+                        activeProject={PanelInteractionVars?.activeProject}
+                        className="w-full"
+                    />
+                </div>
             </motion.div>
 
             {/* Image Modal Lightbox */}
