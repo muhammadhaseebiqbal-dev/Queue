@@ -1,7 +1,7 @@
 import { motion } from "framer-motion"
-import { Search, CheckCircle, Globe, ExternalLink, Sparkles } from "lucide-react"
+import { CheckCircle, Globe, Sparkles } from "lucide-react"
 
-function SearchStatus({ status, logs, sources, isAuto }) {
+function SearchStatus({ status, logs, sources }) {
     if (!status && sources.length === 0) return null;
 
     const getStatusText = () => {

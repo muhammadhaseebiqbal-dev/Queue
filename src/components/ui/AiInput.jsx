@@ -5,7 +5,7 @@ import axios from "axios"
 
 import { API_URL } from "../../config"
 
-function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, toggleDeepMind, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment, activeProject, handleSend, isStreaming, onStop }) {
+function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, toggleDeepMind, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment, activeProject, handleSend, isStreaming, onStop }) {
 
     const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
     const dropdownRef = useRef(null)
@@ -15,9 +15,9 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
     const [isRecording, setIsRecording] = useState(false);
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
-    const silenceTimerRef = useRef(null);
+    // const silenceTimerRef = useRef(null);
     const audioContextRef = useRef(null);
-    const analyserRef = useRef(null);
+    // const analyserRef = useRef(null);
     const maxDurationTimerRef = useRef(null);
 
     const startRecording = async () => {

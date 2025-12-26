@@ -9,14 +9,16 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        let timeoutId;
         if (token) {
             // Configure Axios default header
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-            setLoading(false);
+            timeoutId = setTimeout(() => setLoading(false), 0);
         } else {
             delete axios.defaults.headers.common['Authorization'];
-            setLoading(false);
+            timeoutId = setTimeout(() => setLoading(false), 0);
         }
+        return () => clearTimeout(timeoutId);
     }, [token]);
 
     const login = (userData, authToken) => {

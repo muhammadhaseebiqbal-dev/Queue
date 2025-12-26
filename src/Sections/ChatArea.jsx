@@ -9,7 +9,6 @@ import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from "framer-motion"
 import { useState, useEffect, useRef } from "react"
 import axios from "axios"
-import { nanoid } from "nanoid"
 import { API_URL } from "../config"
 
 function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars }) {
@@ -214,6 +213,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 block: 'end'
             });
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [context, isStreaming])
 
     // Detect model change and add separator
@@ -293,6 +293,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
 
             return () => clearTimeout(saveTimeout);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [context, userId]);
 
     const completeDeepMindQuery = async () => {

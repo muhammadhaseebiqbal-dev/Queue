@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Check, Sparkles, Zap, Brain, Image as ImageIcon, Lock, Mail, Database, MessageSquare } from "lucide-react";
 
@@ -131,9 +130,7 @@ function Changelog() {
             {/* Hero */}
             <div className="pt-32 pb-16 px-6">
                 <div className="max-w-4xl mx-auto text-center">
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
+                    <div
                         className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-400 text-xs font-medium mb-6"
                     >
                         <span className="relative flex h-2 w-2">
@@ -141,23 +138,17 @@ function Changelog() {
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
                         </span>
                         Latest: v2.5.1
-                    </motion.div>
-                    <motion.h1
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 }}
+                    </div>
+                    <h1
                         className="text-5xl md:text-6xl font-bold mb-4"
                     >
                         Changelog
-                    </motion.h1>
-                    <motion.p
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
+                    </h1>
+                    <p
                         className="text-lg text-zinc-400 max-w-2xl mx-auto"
                     >
                         Track every feature, improvement, and fix we've shipped to make QueueAI better.
-                    </motion.p>
+                    </p>
                 </div>
             </div>
 
@@ -168,11 +159,8 @@ function Changelog() {
                     <div className="absolute left-8 top-0 bottom-0 w-px bg-gradient-to-b from-white/20 via-white/10 to-transparent hidden md:block" />
 
                     {updates.map((update, index) => (
-                        <motion.div
+                        <div
                             key={index}
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: index * 0.1 }}
                             className="relative mb-12 md:pl-20"
                         >
                             {/* Timeline Dot */}
@@ -191,20 +179,17 @@ function Changelog() {
 
                                 <ul className="space-y-3">
                                     {update.items.map((item, itemIndex) => (
-                                        <motion.li
+                                        <li
                                             key={itemIndex}
-                                            initial={{ opacity: 0, x: -10 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: index * 0.1 + itemIndex * 0.05 }}
                                             className="flex items-start gap-3 text-sm text-zinc-300"
                                         >
                                             <item.icon size={16} className="text-zinc-500 mt-0.5 flex-shrink-0" />
                                             <span>{item.text}</span>
-                                        </motion.li>
+                                        </li>
                                     ))}
                                 </ul>
                             </div>
-                        </motion.div>
+                        </div>
                     ))}
                 </div>
             </div>

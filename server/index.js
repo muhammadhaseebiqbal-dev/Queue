@@ -6,12 +6,9 @@ import axios from 'axios';
 
 import cors from 'cors';
 import { v2 as cloudinary } from 'cloudinary';
-import { connectDB, Project, Session, Message, User, isConnected, MagicLinkToken } from './models.js';
+import { connectDB, Project, Session, Message, User, MagicLinkToken } from './models.js';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
-import { authMiddleware } from './middleware/auth.js';
-import multer from 'multer';
-import fs from 'fs';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 
@@ -51,21 +48,6 @@ const transporter = nodemailer.createTransport({
 // Google Auth Client
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-async function verifyGoogleToken(token) {
-    try {
-        const ticket = await client.verifyIdToken({
-            idToken: token,
-            audience: process.env.GOOGLE_CLIENT_ID,
-        });
-        return ticket.getPayload();
-    } catch (error) {
-        console.error('[Auth Debug] Verification Failed:', error.message);
-        if (!process.env.GOOGLE_CLIENT_ID) console.error('[Auth Debug] GOOGLE_CLIENT_ID is missing in server environment!');
-        throw new Error('Invalid Google Token');
-    }
-}
-
-// Endpoint: Google Auth
 // Endpoint: Google Auth
 app.post('/api/auth/google', async (req, res) => {
     try {
@@ -91,7 +73,7 @@ app.post('/api/auth/google', async (req, res) => {
                     audience: process.env.GOOGLE_CLIENT_ID,
                 });
                 googleUser = ticket.getPayload();
-            } catch (jwtErr) {
+            } catch (jwtErr) { // eslint-disable-line no-unused-vars
                 throw new Error('Invalid Google Token');
             }
         }
@@ -370,11 +352,8 @@ const MODEL_CONFIGS = {
         temperature: 0.6,
         max_completion_tokens: 4096,
         top_p: 1
-    },
-    'gemini-3': {
-        model: 'gemini-3-pro-preview',
-        provider: 'gemini'
     }
+    // Gemini 3 is not supported yet or missing configuration
 };
 
 // Get available models endpoint
@@ -468,47 +447,22 @@ app.get('/stream/:id', async (req, res) => {
         const modelKey = payload.model || 'llama-3.3-70b';
         const config = MODEL_CONFIGS[modelKey] || MODEL_CONFIGS['llama-3.3-70b'];
 
-        // Check if this is a Gemini model
-        if (config.provider === 'gemini') {
-            // Build conversation string from messages
-            const conversationText = finalMessages
-                .map(msg => {
-                    if (msg.role === 'system') return `System: ${msg.content}`;
-                    if (msg.role === 'user') return `User: ${msg.content}`;
-                    return `Assistant: ${msg.content}`;
-                })
-                .join('\n\n');
+        // Use Groq for other models
+        const chatCompletion = await groq.chat.completions.create({
+            messages: finalMessages,
+            model: config.model,
+            temperature: config.temperature,
+            max_completion_tokens: config.max_completion_tokens,
+            top_p: config.top_p,
+            stream: true,
+            stop: null,
+            ...(config.reasoning_effort && { reasoning_effort: config.reasoning_effort })
+        });
 
-            // Use the simple Gemini 3 API format
-            const response = await gemini.models.generateContentStream({
-                model: config.model,
-                contents: conversationText
-            });
-
-            for await (const chunk of response) {
-                const content = chunk.text || '';
-                if (content) {
-                    res.write(`data: ${JSON.stringify({ content })}\n\n`);
-                }
-            }
-        } else {
-            // Use Groq for other models
-            const chatCompletion = await groq.chat.completions.create({
-                messages: finalMessages,
-                model: config.model,
-                temperature: config.temperature,
-                max_completion_tokens: config.max_completion_tokens,
-                top_p: config.top_p,
-                stream: true,
-                stop: null,
-                ...(config.reasoning_effort && { reasoning_effort: config.reasoning_effort })
-            });
-
-            for await (const chunk of chatCompletion) {
-                const content = chunk.choices[0]?.delta?.content || '';
-                if (content) {
-                    res.write(`data: ${JSON.stringify({ content })}\n\n`);
-                }
+        for await (const chunk of chatCompletion) {
+            const content = chunk.choices[0]?.delta?.content || '';
+            if (content) {
+                res.write(`data: ${JSON.stringify({ content })}\n\n`);
             }
         }
 
@@ -735,7 +689,6 @@ app.delete('/api/session/:sessionId', async (req, res) => {
 
 // Reset Session for User (New Chat)
 app.post('/api/session/reset', async (req, res) => {
-    const { userId } = req.body;
     // In DB mode, "Reset" just means we return a null sessionId to client so it starts fresh
     // The client handles clearing the UI.
     res.json({ sessionId: null, message: "Session reset" });

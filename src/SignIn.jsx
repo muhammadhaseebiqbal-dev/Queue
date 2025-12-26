@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import { useGoogleLogin } from '@react-oauth/google';
 import { useAuth } from './context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
@@ -11,7 +10,7 @@ function SignIn() {
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [successMessage, setSuccessMessage] = useState('');
+    // const [successMessage, setSuccessMessage] = useState('');
 
     const navigate = useNavigate();
     const { login } = useAuth();
@@ -66,9 +65,7 @@ function SignIn() {
                     <ArrowLeft size={16} className="mr-2" /> Back
                 </Link>
 
-                <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
+                <div
                     className="max-w-md w-full mx-auto"
                 >
                     <div className="mb-10">
@@ -108,11 +105,11 @@ function SignIn() {
                         </div>
                     )}
 
-                    {successMessage && (
+                    {/* {successMessage && (
                         <div className="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg text-green-500 text-sm text-center">
                             {successMessage}
                         </div>
-                    )}
+                    )} */}
 
                     <form onSubmit={handleMagicLinkSignIn} className="space-y-4">
                         <div className="space-y-1">
@@ -142,7 +139,7 @@ function SignIn() {
                             By continuing, you agree to our Terms of Service and Privacy Policy.
                         </p>
                     </form>
-                </motion.div>
+                </div>
             </div>
 
             {/* Right Side: Artistic Visual */}

@@ -1,10 +1,10 @@
 import { motion } from 'framer-motion';
 import { Download, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+// import { useState } from 'react';
 import LazyImage from './LazyImage';
 
 const ImageGenCard = ({ imageUrl, prompt }) => {
-    const [isLoaded, setIsLoaded] = useState(false);
+    // const [isLoaded, setIsLoaded] = useState(false);
 
     return (
         <motion.div
@@ -38,7 +38,7 @@ const ImageGenCard = ({ imageUrl, prompt }) => {
                     src={imageUrl}
                     alt={prompt}
                     className="w-full h-full object-cover"
-                    onLoad={() => setIsLoaded(true)}
+                    // onLoad={() => setIsLoaded(true)}
                 />
             </div>
 

@@ -96,21 +96,27 @@ function MarkdownRenderer({ content, streaming = false, sources = [] }) {
                     remarkPlugins={[remarkGfm, remarkMath]}
                     rehypePlugins={[rehypeHighlight, rehypeKatex, [rehypeExternalLinks, { target: '_blank', rel: ['noopener', 'noreferrer'] }]]}
                     components={{
+                        // eslint-disable-next-line no-unused-vars
                         h1: ({ node, ...props }) => (
                             <h1 className="text-3xl font-bold mb-4 mt-6 text-text" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         h2: ({ node, ...props }) => (
                             <h2 className="text-2xl font-bold mb-3 mt-5 text-text" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         h3: ({ node, ...props }) => (
                             <h3 className="text-xl font-semibold mb-2 mt-4 text-text" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         h4: ({ node, ...props }) => (
                             <h4 className="text-lg font-semibold mb-2 mt-3 text-text" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         p: ({ node, ...props }) => (
                             <p className="mb-4 text-text leading-7" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         code: ({ node, inline, className, children, ...props }) => {
                             if (inline) {
                                 return (
@@ -131,49 +137,63 @@ function MarkdownRenderer({ content, streaming = false, sources = [] }) {
                                 </code>
                             )
                         },
+                        // eslint-disable-next-line no-unused-vars
                         pre: ({ node, children, ...props }) => (
                             <pre className="bg-[#0d1117] rounded-lg p-4 my-4 overflow-x-auto border border-border" {...props}>
                                 {children}
                             </pre>
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         ul: ({ node, ...props }) => (
                             <ul className="list-disc list-outside mb-4 ml-6 space-y-1 text-text" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         ol: ({ node, ...props }) => (
                             <ol className="list-decimal list-outside mb-4 ml-6 space-y-1 text-text" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         li: ({ node, ...props }) => (
                             <li className="text-text leading-7" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         blockquote: ({ node, ...props }) => (
                             <blockquote className="border-l-4 border-border pl-4 my-4 text-textLight italic" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         a: ({ node, ...props }) => (
                             <a className="text-blue-400 hover:text-blue-300 underline cursor-pointer" target="_blank" rel="noopener noreferrer" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         table: ({ node, ...props }) => (
                             <div className="overflow-x-auto my-4 scrollbar-custom">
                                 <table className="min-w-full border-collapse border border-border" {...props} />
                             </div>
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         thead: ({ node, ...props }) => (
                             <thead className="bg-secondary" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         th: ({ node, ...props }) => (
                             <th className="border border-border px-4 py-2 text-text font-semibold text-left" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         td: ({ node, ...props }) => (
                             <td className="border border-border px-4 py-2 text-text" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         hr: ({ node, ...props }) => (
                             <hr className="border-t border-border my-6" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         img: ({ node, ...props }) => (
                             <LazyImage className="max-w-full h-auto rounded-lg my-4" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         strong: ({ node, ...props }) => (
                             <strong className="font-bold text-text" {...props} />
                         ),
+                        // eslint-disable-next-line no-unused-vars
                         em: ({ node, ...props }) => (
                             <em className="italic text-text" {...props} />
                         ),

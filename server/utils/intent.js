@@ -89,7 +89,7 @@ export async function detectSearchIntent(queryOrMessages) {
         let result;
         try {
             result = JSON.parse(content);
-        } catch (e) {
+        } catch (e) { // eslint-disable-line no-unused-vars
             console.error("[Intent] Failed to parse JSON:", content);
             return { category: "NO" };
         }

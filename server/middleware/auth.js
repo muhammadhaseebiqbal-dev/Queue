@@ -16,7 +16,7 @@ export const authMiddleware = (req, res, next) => {
         // 3. Attach User to Request
         req.user = decoded; // { userId, email, ... }
         next();
-    } catch (error) {
+    } catch (error) { // eslint-disable-line no-unused-vars
         // console.error('[Auth Middleware] Invalid Token:', error.message);
         return res.status(403).json({ error: 'Forbidden: Invalid Token' });
     }
