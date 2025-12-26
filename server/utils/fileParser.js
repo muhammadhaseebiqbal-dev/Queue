@@ -1,46 +1,38 @@
+import pdf from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
-import csv from 'csv-parser';
-import { Readable } from 'stream';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
-const pdf = require('pdf-parse');
 
 /**
- * Extracts text content from various file types.
- * @param {Object} file - { buffer, mimetype, originalname }
- * @returns {Promise<string>} - Extracted text content
+ * Parses file buffer into text content based on mime type or extension
+ * @param {Buffer} buffer - File buffer
+ * @param {String} mimeType - Mime type of the file
+ * @param {String} originalName - Original filename
+ * @returns {Promise<String>} - Extracted text
  */
-export async function parseFileContent(file) {
-    if (!file || !file.buffer) return null;
-
+export const parseFile = async (buffer, mimeType, originalName) => {
     try {
-        if (file.mimetype === 'application/pdf') {
-            const data = await pdf(file.buffer);
+        console.log(`[FileParser] Parsing ${originalName} (${mimeType})...`);
+
+        // Handle PDF
+        if (mimeType === 'application/pdf' || originalName.endsWith('.pdf')) {
+            const data = await pdf(buffer);
             return data.text;
         }
-        else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-            const result = await mammoth.extractRawText({ buffer: file.buffer });
+
+        // Handle DOCX
+        if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || originalName.endsWith('.docx')) {
+            const result = await mammoth.extractRawText({ buffer: buffer });
             return result.value;
         }
-        else if (file.mimetype === 'text/csv' || file.mimetype === 'application/vnd.ms-excel') {
-            return new Promise((resolve, reject) => {
-                const results = [];
-                const stream = Readable.from(file.buffer.toString());
-                stream
-                    .pipe(csv())
-                    .on('data', (data) => results.push(JSON.stringify(data)))
-                    .on('end', () => resolve(results.join('\n')))
-                    .on('error', (err) => reject(err));
-            });
+
+        // Handle Text Files (txt, md, js, code, etc.)
+        if (mimeType.startsWith('text/') || originalName.match(/\.(txt|md|js|py|html|css|json)$/i)) {
+            return buffer.toString('utf-8');
         }
-        else if (file.buffer) {
-            // Default to plain text for other types (js, txt, md, etc.)
-            return file.buffer.toString('utf-8');
-        }
+
+        console.warn(`[FileParser] Unsupported file type: ${mimeType}`);
+        return ""; // Unsupported type (maybe just store name?)
     } catch (error) {
-        console.error(`[FileParser] Error parsing ${file.originalname}:`, error);
-        return `Error reading file ${file.originalname}: ${error.message}`;
+        console.error(`[FileParser] Error parsing file ${originalName}:`, error);
+        throw error;
     }
-    return null;
-}
+};

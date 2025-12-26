@@ -77,17 +77,26 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
     const [newProjectColor, setNewProjectColor] = useState('#6366f1');
     const [newProjectEmoji, setNewProjectEmoji] = useState('📁');
     const [newProjectDescription, setNewProjectDescription] = useState('');
+    const [selectedFiles, setSelectedFiles] = useState([]); // State for file uploads
 
     const handleCreateProject = async () => {
         if (!newProjectName.trim()) return;
 
         try {
-            const response = await axios.post(`${API_URL}/api/projects`, {
-                userId: PanelInteractionVars.userId,
-                name: newProjectName,
-                color: newProjectColor,
-                emoji: newProjectEmoji,
-                description: newProjectDescription
+            const formData = new FormData();
+            formData.append('userId', PanelInteractionVars.userId);
+            formData.append('name', newProjectName);
+            formData.append('color', newProjectColor);
+            formData.append('emoji', newProjectEmoji);
+            formData.append('description', newProjectDescription);
+
+            // Append each file
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+
+            const response = await axios.post(`${API_URL}/api/projects`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
             });
 
             // Add to local state
@@ -98,6 +107,7 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
             setNewProjectColor('#6366f1');
             setNewProjectEmoji('📁');
             setNewProjectDescription('');
+            setSelectedFiles([]); // Reset files
             setShowProjectModal(false);
         } catch (error) {
             console.error('Failed to create project:', error);
@@ -424,8 +434,31 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                                             onChange={(e) => setNewProjectDescription(e.target.value)}
                                             placeholder="This context will be added to all chats in this project..."
                                             className="w-full bg-primary border-2 border-border rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-text transition-colors resize-none"
-                                            rows={3}
+                                            rows={2}
                                         />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-sm text-textLight mb-2 block">Upload Context Documents (PDF, DOCX, TXT)</label>
+                                        <div className="flex flex-col gap-2">
+                                            <input
+                                                type="file"
+                                                multiple
+                                                accept=".pdf,.docx,.txt"
+                                                onChange={(e) => setSelectedFiles(Array.from(e.target.files))}
+                                                className="block w-full text-sm text-textLight
+                                                    file:mr-4 file:py-2 file:px-4
+                                                    file:rounded-full file:border-0
+                                                    file:text-xs file:font-semibold
+                                                    file:bg-tertiary file:text-text
+                                                    hover:file:bg-white/10"
+                                            />
+                                            {selectedFiles.length > 0 && (
+                                                <div className="text-xs text-textLight">
+                                                    {selectedFiles.length} file(s) selected: {selectedFiles.map(f => f.name).join(', ')}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 

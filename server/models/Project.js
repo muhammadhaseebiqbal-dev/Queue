@@ -34,7 +34,13 @@ const projectSchema = new mongoose.Schema({
     updatedAt: {
         type: Date,
         default: Date.now
-    }
+    },
+    documents: [{
+        name: { type: String, required: true },
+        type: { type: String, required: true }, // 'pdf', 'docx', 'txt'
+        content: { type: String, default: '' }, // Extracted text content
+        uploadedAt: { type: Date, default: Date.now }
+    }]
 });
 
 // Update timestamp on save

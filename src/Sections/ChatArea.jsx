@@ -339,7 +339,8 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             // Prepare DeepMind session
             const prepareRes = await axios.post(`${API_URL}/deepmind/prepare`, {
                 userId,
-                message: userPrompt
+                message: userPrompt,
+                projectId: PanelInteractionVars?.activeProject?._id // Pass Active Project ID
             });
 
             const { sessionId, session } = prepareRes.data;
@@ -924,45 +925,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                         </div>
                                     )}
 
-                                    {/* Attachment Card */}
-                                    {node.attachment && (
-                                        <div className="flex justify-end mb-2">
-                                            <div className="overflow-hidden rounded-xl bg-secondary/50 border border-white/10 w-fit max-w-[80%]">
-                                                {node.attachment.type.startsWith('image/') && node.attachment.content ? (
-                                                    <div
-                                                        className="relative group cursor-pointer"
-                                                        onClick={() => setPreviewImage(node.attachment.content)}
-                                                    >
-                                                        <img
-                                                            src={node.attachment.content}
-                                                            alt={node.attachment.name}
-                                                            className="max-w-xs max-h-64 object-cover rounded-t-xl"
-                                                        />
-                                                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <span className="text-xs text-white truncate block">{node.attachment.name}</span>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <a
-                                                        href="#"
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            handleDownload(node.attachment.content, node.attachment.name);
-                                                        }}
-                                                        className="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/5 transition-colors"
-                                                    >
-                                                        <div className={`p-2 rounded-lg ${node.attachment.type.startsWith('image/') ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>
-                                                            {node.attachment.type.startsWith('image/') ? <ImageIcon size={20} /> : <FileText size={20} />}
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-sm font-medium text-text">{node.attachment.name}</span>
-                                                            <span className="text-xs text-textLight uppercase">{node.attachment.type.split('/')[1] || 'FILE'}</span>
-                                                        </div>
-                                                    </a>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
+
 
                                     {/* Weather Card - Full Width */}
                                     {node.weatherData && (
@@ -1003,6 +966,43 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                                 : 'mr-auto w-full'
                                                 }`}
                                         >
+                                            {/* Attachment Preview (Moved Inside Bubble) */}
+                                            {node.attachment && (
+                                                <div className="mb-3 overflow-hidden rounded-xl bg-black/20 border border-white/5 w-full">
+                                                    {node.attachment.type.startsWith('image/') && node.attachment.content ? (
+                                                        <div
+                                                            className="relative group cursor-pointer"
+                                                            onClick={() => setPreviewImage(node.attachment.content)}
+                                                        >
+                                                            <img
+                                                                src={node.attachment.content}
+                                                                alt={node.attachment.name}
+                                                                className="w-full max-h-64 object-cover"
+                                                            />
+                                                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <span className="text-xs text-white truncate block">{node.attachment.name}</span>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <a
+                                                            href="#"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                handleDownload(node.attachment.content, node.attachment.name);
+                                                            }}
+                                                            className="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/5 transition-colors"
+                                                        >
+                                                            <div className={`p-2 rounded-lg ${node.attachment.type.startsWith('image/') ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>
+                                                                {node.attachment.type.startsWith('image/') ? <ImageIcon size={20} /> : <FileText size={20} />}
+                                                            </div>
+                                                            <div className="flex flex-col overflow-hidden">
+                                                                <span className="text-sm font-medium text-text truncate">{node.attachment.name}</span>
+                                                                <span className="text-xs text-textLight uppercase">{node.attachment.type.split('/')[1] || 'FILE'}</span>
+                                                            </div>
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            )}
                                             {node.role?.toLowerCase() === "user" ? (
                                                 <p className="text-text whitespace-pre-wrap">{node.content}</p>
                                             ) : (

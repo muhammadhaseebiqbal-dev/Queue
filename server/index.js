@@ -8,12 +8,18 @@ import { performSearch } from './utils/search.js';
 import { detectSearchIntent } from './utils/intent.js';
 import { getWeatherData } from './utils/weather.js';
 
-import { parseFileContent } from './utils/fileParser.js';
+import { parseFile } from './utils/fileParser.js';
 import { connectDB, Project, Session, Message, User, isConnected } from './models.js'; // Import Models
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import { authMiddleware } from './middleware/auth.js';
 import multer from 'multer';
+
+// Configure Multer for memory storage
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB Limit per file
+});
 import fs from 'fs';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
@@ -481,7 +487,7 @@ const MODEL_CONFIGS = {
 };
 
 // Multer setup for in-memory storage
-const upload = multer({ storage: multer.memoryStorage() });
+// Multer setup for in-memory storage (Moved to top)
 
 // Endpoint: Speech-to-Text (Whisper)
 app.post('/transcribe', upload.single('file'), async (req, res) => {
@@ -708,11 +714,11 @@ app.get('/stream/:id', async (req, res) => {
                 // Decode base64 buffer for parser (Use protected originalBase64)
                 if (originalBase64) {
                     const buffer = Buffer.from(originalBase64.split(',')[1], 'base64');
-                    const parsedText = await parseFileContent({
+                    const parsedText = await parseFile(
                         buffer,
-                        mimetype: payload.attachment.type,
-                        originalname: payload.attachment.name
-                    });
+                        payload.attachment.type,
+                        payload.attachment.name
+                    );
 
                     if (parsedText) {
                         attachmentContext = `\n\n---\n[ATTACHED FILE: ${payload.attachment.name}]\n${parsedText.slice(0, 50000)}\n---\n`; // Cap at 50k chars to be safe
@@ -982,7 +988,7 @@ app.get('/api/messages/:sessionId', async (req, res) => {
 // DeepMind: Prepare multi-model consensus query
 app.post('/deepmind/prepare', async (req, res) => {
     const sessionId = Date.now().toString() + Math.random().toString(36).substring(7);
-    const { userId, messages, message } = req.body;
+    const { userId, messages, message, projectId } = req.body;
 
     // Handle both 'message' (single) and 'messages' (array) parameters
     let contextMessages = [];
@@ -1038,6 +1044,7 @@ app.post('/deepmind/prepare', async (req, res) => {
     const phase1Models = selectRandomModels(3);
 
     deepMindSessions[sessionId] = {
+        projectId, // Store projectId for context retrieval
         messages: cleanedMessages,
         phase: 0,
         phase1Models: phase1Models,
@@ -1248,12 +1255,46 @@ app.get('/api/project/:projectId/sessions', async (req, res) => {
 });
 
 // Create Project
-app.post('/api/projects', async (req, res) => {
+// Create Project with Documents
+app.post('/api/projects', upload.array('files'), async (req, res) => {
     try {
         const { userId, name, color, emoji, description } = req.body;
-        const project = await Project.create({ userId, name, color, emoji, description });
+
+        let processedDocuments = [];
+
+        // Process uploaded files if any
+        if (req.files && req.files.length > 0) {
+            console.log(`[Project] Processing ${req.files.length} uploads for project: ${name}`);
+
+            for (const file of req.files) {
+                try {
+                    const textContent = await parseFile(file.buffer, file.mimetype, file.originalname);
+                    processedDocuments.push({
+                        name: file.originalname,
+                        type: file.mimetype.includes('pdf') ? 'pdf' :
+                            file.mimetype.includes('word') ? 'docx' : 'txt',
+                        content: textContent,
+                        uploadedAt: new Date()
+                    });
+                } catch (err) {
+                    console.error(`[Project] Failed to parse ${file.originalname}:`, err);
+                    // continue with other files
+                }
+            }
+        }
+
+        const project = await Project.create({
+            userId,
+            name,
+            color,
+            emoji,
+            description,
+            documents: processedDocuments
+        });
+
         res.json(project);
     } catch (error) {
+        console.error('Create Project Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -1301,6 +1342,33 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
                 },
                 ...session.messages
             ];
+
+        // INJECT PROJECT DOCUMENTS CONTEXT
+        if (session.projectId) {
+            try {
+                const project = await Project.findById(session.projectId);
+                if (project && project.documents && project.documents.length > 0) {
+                    const docContext = project.documents
+                        .map(doc => `[DOCUMENT: ${doc.name}]\n${doc.content.substring(0, 5000)}...`) // Limit to 5k chars per doc for now
+                        .join('\n\n');
+                    
+                    const projectContextMsg = {
+                        role: 'system',
+                        content: `[PROJECT CONTEXT]\nThe following documents are uploaded to this project. Use them to answer user queries:\n\n${docContext}\n[END PROJECT CONTEXT]`
+                    };
+
+                    // Insert after system prompt (index 1) or at beginning
+                    if (finalMessages[0].role === 'system') {
+                        finalMessages.splice(1, 0, projectContextMsg);
+                    } else {
+                        finalMessages.unshift(projectContextMsg);
+                    }
+                    res.write(`data: ${JSON.stringify({ type: 'phase', phase: 0.1, message: "Reading project documents..." })}\n\n`);
+                }
+            } catch (err) {
+                console.error("Failed to inject project context:", err);
+            }
+        }
 
         // PHASE 0.5: Research (Gathering Resources)
         // Check if we need external info before starting the debate
