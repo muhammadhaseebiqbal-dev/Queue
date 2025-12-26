@@ -954,7 +954,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     return (
 
         <motion.div
-            className={`bg-primary relative h-screen flex flex-col items-center flex-1 w-full overflow-hidden justify-end`}
+            className={`bg-primary relative h-[100dvh] flex flex-col items-center flex-1 w-full overflow-hidden justify-end`}
         >
             {/* Panel Toggle Button */}
             {/* Panel Toggle Button - Hidden when panel is open on mobile to prevent double toggles/visual clutter if using panel's own controls, but explicit here for consistency */}
@@ -1015,6 +1015,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                     onClick={(e) => {
                                         e.preventDefault();
                                         // Clear all auth tokens
+                                        localStorage.removeItem("auth_token"); // Fix: Clear the actual auth token used by context
                                         localStorage.removeItem("queuebot_token");
                                         localStorage.removeItem("queuebot_userid");
                                         localStorage.removeItem("queuebot_sessions");
@@ -1206,7 +1207,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                         {(!node.generatedImage || node.role === 'user') && (
                                             <motion.div
                                                 className={`text-text p-4 rounded-2xl ${node.role?.toLowerCase() === "user"
-                                                    ? 'bg-secondary ml-auto w-fit max-w-[80%]'
+                                                    ? 'bg-secondary ml-auto w-fit max-w-[98%] md:max-w-[80%]'
                                                     : 'mr-auto w-full'
                                                     }`}
                                             >

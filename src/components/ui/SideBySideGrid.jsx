@@ -14,7 +14,7 @@ function SideBySideGrid({ streams, isLoading }) {
 
     return (
         <div className="flex-1 w-full h-full overflow-hidden p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 h-full">
+            <div className="flex flex-row md:grid md:grid-cols-2 lg:grid-cols-4 gap-4 h-full overflow-x-auto md:overflow-x-hidden snap-x snap-mandatory pb-4 md:pb-0">
                 {models.map((modelId) => {
                     const config = MODEL_CONFIG[modelId];
                     const content = streams[modelId] || "";
@@ -23,7 +23,7 @@ function SideBySideGrid({ streams, isLoading }) {
                     return (
                         <div
                             key={modelId}
-                            className="bg-secondary/50 border border-white/5 rounded-2xl flex flex-col h-full overflow-hidden backdrop-blur-sm"
+                            className="flex-shrink-0 w-[85vw] md:w-auto h-full snap-center bg-secondary/50 border border-white/5 rounded-2xl flex flex-col overflow-hidden backdrop-blur-sm"
                         >
                             {/* Header */}
                             <div className={`p-3 border-b border-white/5 flex items-center gap-2 ${config.bg}`}>
