@@ -1,15 +1,25 @@
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Sparkles, Zap, Brain, MessageSquare, Layers, Command } from "lucide-react";
 import { useAuth } from "./context/AuthContext";
 import { Helmet } from "react-helmet-async";
+import { useEffect } from "react";
 
 function LandingPage() {
     const { token } = useAuth();
+    const navigate = useNavigate();
+
+    // Auto-redirect if logged in
+    useEffect(() => {
+        if (token) {
+            navigate("/app");
+        }
+    }, [token, navigate]);
+
     const destination = token ? "/app" : "/signin";
 
     return (
-        <div className="min-h-screen bg-[#0A0A0A] text-white selection:bg-indigo-500/30 font-sans">
+        <div className="min-h-screen bg-[#0A0A0A] text-white selection:bg-indigo-500/30 font-sans overflow-x-hidden">
             <Helmet>
                 <title>QueueAI - The Ultimate Multi-Model AI Workspace</title>
                 <meta name="description" content="A multimodel ai chatbot that manages all of your project and provide canvas full of funny personas" />
@@ -33,24 +43,24 @@ function LandingPage() {
             </Helmet>
 
             {/* Floating Navbar (Mobbin Style) */}
-            <div className="fixed top-6 left-0 right-0 z-50 flex justify-center px-6">
-                <nav className="w-full max-w-3xl bg-[#0A0A0A]/80 backdrop-blur-xl border border-white/10 rounded-full px-6 py-3 flex items-center justify-between shadow-2xl shadow-black/50">
+            <div className="fixed top-4 md:top-6 left-0 right-0 z-50 flex justify-center px-4 md:px-6">
+                <nav className="w-full max-w-[90%] md:max-w-3xl bg-[#0A0A0A]/80 backdrop-blur-xl border border-white/10 rounded-full px-4 md:px-6 py-2.5 md:py-3 flex items-center justify-between shadow-2xl shadow-black/50">
                     <div className="flex items-center gap-2">
-                        <img src="/logo.svg" alt="QueueAI" className="h-8 w-8" />
+                        <img src="/logo.svg" alt="QueueAI" className="h-6 w-6 md:h-8 md:w-8" />
                     </div>
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-3 md:gap-6">
                         {token ? (
                             <Link to="/app" className="text-xs font-medium text-zinc-400 hover:text-white transition-colors">
                                 Dashboard
                             </Link>
                         ) : (
-                            <Link to="/signin" className="text-xs font-medium text-zinc-400 hover:text-white transition-colors">
+                            <Link to="/signin" className="hidden md:block text-xs font-medium text-zinc-400 hover:text-white transition-colors">
                                 Sign In
                             </Link>
                         )}
                         <Link
                             to={destination}
-                            className="px-4 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-zinc-200 transition-colors"
+                            className="px-3 py-1.5 md:px-4 md:py-2 bg-white text-black text-[10px] md:text-xs font-bold rounded-full hover:bg-zinc-200 transition-colors"
                         >
                             Get Started
                         </Link>

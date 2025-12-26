@@ -61,13 +61,24 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
     }, [isPanelExpanded, PanelInteractionVars.sidebarRefreshKey]);
 
     const handleNewChat = () => {
+        // Force reset ChatArea state
+        if (PanelInteractionVars.triggerChatReset) {
+            PanelInteractionVars.triggerChatReset();
+        }
+
         // Reset ChatArea state via parent
         if (PanelInteractionVars.setActiveSessionId) {
             PanelInteractionVars.setActiveSessionId(null);
         }
-        // Clear active project for standard chats
+
+        // Clear active project
         if (PanelInteractionVars.setActiveProject) {
             PanelInteractionVars.setActiveProject(null);
+        }
+
+        // Clear active persona
+        if (PanelInteractionVars.setActivePersona) {
+            PanelInteractionVars.setActivePersona(null);
         }
 
         // Close panel on mobile for better UX

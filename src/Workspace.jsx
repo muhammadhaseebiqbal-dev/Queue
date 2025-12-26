@@ -18,6 +18,7 @@ function Workspace() {
     })
 
     const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0)
+    const [chatResetToken, setChatResetToken] = useState(0)
     const [activeProject, setActiveProject] = useState(null)
     const [activePersona, setActivePersona] = useState(null)
 
@@ -29,6 +30,8 @@ function Workspace() {
         userId,
         sidebarRefreshKey,
         triggerSidebarRefresh: () => setSidebarRefreshKey(prev => prev + 1),
+        chatResetToken,
+        triggerChatReset: () => setChatResetToken(prev => prev + 1),
         activeProject,
         setActiveProject,
         activePersona,

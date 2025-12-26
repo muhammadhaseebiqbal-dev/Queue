@@ -1,4 +1,5 @@
 import { Copy, Sparkles, Image as ImageIcon, FileText, PanelRightOpen, X, ThumbsUp, ThumbsDown, Check, Bot, Rocket, Mountain, Moon, ChevronDown, Trash2 } from "lucide-react";
+import WelcomeScreen from "../components/ui/WelcomeScreen";
 import AiInput from "../components/ui/AiInput"
 import MarkdownRenderer from "../components/ui/MarkdownRenderer";
 import DeepMindProgress from "../components/ui/DeepMindProgress"
@@ -20,7 +21,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     const [isSendPrompt, setIsSendPrompt] = useState(false)
     const [context, setcontext] = useState([])
     const [isStreaming, setIsStreaming] = useState(false)
-    const [selectedModel, setSelectedModel] = useState('gpt-oss-120b')
+    const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile')
     const [isDeepMindEnabled, setIsDeepMindEnabled] = useState(false)
     const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false)
     const [attachment, setAttachment] = useState(null) // New Attachment State
@@ -32,10 +33,10 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     const [showResetModal, setShowResetModal] = useState(false)
 
     const models = [
-        { id: 'gpt-oss-120b', name: 'GPT-OSS 120B', Icon: Bot },
-        { id: 'qwen-3-32b', name: 'QWEN 3 32B', Icon: Rocket },
-        { id: 'llama-3.3-70b', name: 'LLAMA 3.3 70B', Icon: Mountain },
-        { id: 'kimi-k2', name: 'KIMI K2', Icon: Moon }
+        { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', Icon: Bot },
+        { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B', Icon: Rocket },
+        { id: 'llama3-70b-8192', name: 'Llama 3 70B', Icon: Mountain },
+        { id: 'gemma2-9b-it', name: 'Gemma 2 9B', Icon: Moon }
     ]
 
     // const [userId] = useState(() => nanoid()) // Removed: using shared userId from App
@@ -71,7 +72,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
         }
     };
 
-    const previousModel = useRef('gpt-oss-120b')
+    const previousModel = useRef('llama-3.3-70b-versatile')
     const streamingMessageRef = useRef("")
     const eventSourceRef = useRef(null)
     const messagesEndRef = useRef(null)
@@ -108,6 +109,21 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
 
     // Track the last loaded session to prevent duplicate loads
     const loadedSessionRef = useRef(null);
+
+    // Force Reset Local State when New Chat is clicked (fixes null->null state issue)
+    useEffect(() => {
+        if (PanelInteractionVars?.chatResetToken > 0) {
+            setcontext([]);
+            setIsChatStarted(false);
+            setpromptInput('');
+            loadedSessionRef.current = null;
+            setDeepMindPhase(0);
+            setDeepMindData({});
+            setAttachment(null);
+            // Reset active session ref to null so new auto-saves create fresh sessions
+            activeSessionIdRef.current = null;
+        }
+    }, [PanelInteractionVars?.chatResetToken]);
 
     // Load or reset chat based on session ID changes
     useEffect(() => {
@@ -874,7 +890,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     return (
 
         <motion.div
-            className={`bg-primary relative h-screen flex flex-col items-center flex-1 w-full overflow-hidden ${isChatStarted ? 'justify-end' : 'justify-center'}`}
+            className={`bg-primary relative h-screen flex flex-col items-center flex-1 w-full overflow-hidden justify-end`}
         >
             {/* Panel Toggle Button */}
             {/* Panel Toggle Button - Hidden when panel is open on mobile to prevent double toggles/visual clutter if using panel's own controls, but explicit here for consistency */}
@@ -944,15 +960,9 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
 
             {/* Welcome Screen - Shows when no chat is started */}
             {!isChatStarted && !PanelInteractionVars?.activePersona && (
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ type: "spring", stiffness: 200, damping: 20 }}
-                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[200%] pointer-events-none"
-                >
-                    <img src="/logo.svg" alt="QueueAI" className="w-24 h-24 md:w-32 md:h-32 opacity-40" />
-                </motion.div>
+                <div className="w-full max-w-2xl px-4 text-center z-10 flex-1 flex flex-col justify-center items-center">
+                    <WelcomeScreen onSuggestionClick={setpromptInput} />
+                </div>
             )}
 
             {/* Persona Greeting Screen */}
@@ -961,7 +971,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
-                    className="w-full max-w-2xl px-4 text-center mb-8 z-10"
+                    className="w-full max-w-2xl px-4 text-center z-10 flex-1 flex flex-col justify-center items-center"
                 >
                     <div className="text-6xl mb-4">{PanelInteractionVars.activePersona.emoji}</div>
                     <h2 className="text-3xl font-bold text-text mb-2">{PanelInteractionVars.activePersona.name}</h2>
