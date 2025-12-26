@@ -1,7 +1,4 @@
 User-agent: *
 Allow: /
-Disallow: /app
-Disallow: /verify-magic-link
-Disallow: /email-sent
 
-Sitemap: https://queueai.app/sitemap.xml
+Sitemap: https://queueai.com/sitemap.xml

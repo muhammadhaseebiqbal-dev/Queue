@@ -254,7 +254,7 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                                     <PersonasView
                                         personaChats={chats.filter(chat => chat.personaId)}
                                         onSelect={async (persona) => {
-                                            console.log('Selected Persona:', persona);
+
                                             if (PanelInteractionVars.setActivePersona) {
                                                 PanelInteractionVars.setActivePersona(persona);
 
@@ -263,11 +263,11 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
 
                                                 if (existingPersonaSession) {
                                                     // Continue existing conversation
-                                                    console.log('[Persona] Continuing existing session:', existingPersonaSession.id);
+
                                                     PanelInteractionVars.setActiveSessionId(existingPersonaSession.id);
                                                 } else {
                                                     // Start new conversation (will be created on first message)
-                                                    console.log('[Persona] Starting new session for:', persona.name);
+
                                                     PanelInteractionVars.setActiveSessionId(null);
                                                 }
 
@@ -341,11 +341,11 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
 
                                                     if (sessions && sessions.length > 0) {
                                                         // Continuous Chat: Load the most recent session
-                                                        console.log(`[Panel] Continuous mode: Resuming session ${sessions[0]._id}`);
+
                                                         PanelInteractionVars.setActiveSessionId(sessions[0]._id);
                                                     } else {
                                                         // No session exists, start clean (will create one on first message)
-                                                        console.log('[Panel] Continuous mode: Starting fresh project chat');
+
                                                         PanelInteractionVars.setActiveSessionId(null);
                                                     }
                                                 } catch (error) {

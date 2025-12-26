@@ -126,14 +126,14 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             const currentSessionId = PanelInteractionVars?.activeSessionId;
 
             if (!currentSessionId) {
-                console.log('[Load] No session ID, clearing context');
+
                 setcontext([]);
                 setIsChatStarted(false);
                 setIsLoadingHistory(false);
                 return;
             }
 
-            console.log('[Load] Loading session:', currentSessionId);
+
             setIsLoadingHistory(true); // Show skeleton
 
             if (currentSessionId) {
@@ -155,7 +155,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                             feedback: msg.feedback
                         }));
 
-                        console.log(`[ChatArea] Loaded ${formattedMessages.length} messages for session ${currentSessionId}`);
+
 
                         setcontext(formattedMessages);
                         setIsChatStarted(true);
@@ -291,7 +291,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
 
                 // Only block if we're creating a NEW session (no sessionId) AND already creating one
                 if (!currentSessionId && isCreatingSessionRef.current) {
-                    console.log('[ChatArea] Session creation already in progress, skipping...');
+
                     return;
                 }
 
@@ -322,7 +322,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                             }
 
                             if (PanelInteractionVars.triggerSidebarRefresh) {
-                                console.log('[ChatArea] New session detected, refreshing sidebar only');
+
                                 PanelInteractionVars.triggerSidebarRefresh();
                                 // Note: We intentionally don't call setActiveSessionId to avoid reloading
                             }
@@ -632,7 +632,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 let data;
                 try {
                     data = JSON.parse(event.data);
-                    console.log('[Stream Event]', data.type || 'chunk');
+
                 } catch (e) {
                     console.error('[Stream] JSON Parse Error:', e);
                     return; // Skip invalid chunks
@@ -713,7 +713,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 }
 
                 if (data.type === 'image_generated') {
-                    console.log('[Stream] Received Image:', data.url);
+
                     setcontext(prev => {
                         const updated = [...prev];
                         const lastIndex = updated.length - 1;
@@ -732,7 +732,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 }
 
                 if (data.type === 'attachment_uploaded') {
-                    console.log('[Stream] Attachment Uploaded:', data.url);
+
                     setcontext(prev => {
                         const updated = [...prev];
                         // Find the last user message
@@ -758,7 +758,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                     messages: updated,
                                     sessionId: PanelInteractionVars.activeSessionId, // Fix for correct session update
                                     projectId: PanelInteractionVars?.activeProject?._id
-                                }).then(() => console.log('[Stream] Context saved with persistent Image URL'))
+                                }).then(() => { })
                                     .catch(e => console.error('Failed to save persistent image:', e));
                             }
                         }

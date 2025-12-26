@@ -1,0 +1,2 @@
+Now last but Not the least i want you toadd the three dot right side of this app when click it show only two option one is logout and other is side by side mode (toggle). When toggle is on the the side bar animate and turn off and the whole screen is dividedd in to parts number of  according to the number of compatible models like the gpt qwen llama kimi and gemini and take the prompt from user when submit this prompt goes to each Ai and generate stream simulatnously. All in Alll i wnat one prompt to multiple Ai answers sytem. beautifully designed.
+

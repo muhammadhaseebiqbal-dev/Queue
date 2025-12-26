@@ -1,11 +1,25 @@
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Check, Sparkles, Zap, Brain, Image as ImageIcon, Lock, Mail, Database, MessageSquare } from "lucide-react";
+import { ArrowLeft, Check, Sparkles, Zap, Brain, Image as ImageIcon, Lock, Mail, Database, MessageSquare, Users, Shield, Upload } from "lucide-react";
 
 function Changelog() {
     const updates = [
         {
-            date: "December 14, 2025",
+            date: "December 26, 2024",
+            version: "v3.0.1",
+            title: "AI Personas, File Upload & NSFW Detection",
+            items: [
+                { icon: Users, text: "AI Personas system - Chat with specialized AI personalities (Scientists, Philosophers, etc.)" },
+                { icon: Sparkles, text: "Persona conversation persistence - Each persona maintains its own continuous chat" },
+                { icon: Shield, text: "NSFW content detection and filtering for safe conversations" },
+                { icon: Upload, text: "File upload support in Projects - Attach documents for context" },
+                { icon: Check, text: "Project and chat deletion with confirmation modals" },
+                { icon: Check, text: "Scroll-to-bottom button in chat history sidebar" },
+                { icon: Check, text: "Green indicator showing personas with active conversations" }
+            ]
+        },
+        {
+            date: "December 14, 2024",
             version: "v2.5.0",
             title: "Cross-Login Authentication & UI Enhancements",
             items: [
@@ -129,7 +143,7 @@ function Changelog() {
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
                         </span>
-                        Latest: v2.5.0
+                        Latest: v3.0.1
                     </motion.div>
                     <motion.h1
                         initial={{ opacity: 0, y: 20 }}

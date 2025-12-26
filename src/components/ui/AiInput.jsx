@@ -32,7 +32,7 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
 
             // Max recording duration: 5 minutes (safety limit)
             maxDurationTimerRef.current = setTimeout(() => {
-                console.log('[Voice] Auto-stopping: Max duration reached (5m)');
+
                 stopRecording();
             }, 300000);
 
@@ -44,7 +44,7 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
 
             mediaRecorder.onstop = async () => {
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
-                console.log(`[Voice] Recording size: ${(audioBlob.size / 1024).toFixed(2)} KB`);
+
 
                 // Check if file is too large (Groq limit appears to be ~25MB)
                 if (audioBlob.size > 25 * 1024 * 1024) {

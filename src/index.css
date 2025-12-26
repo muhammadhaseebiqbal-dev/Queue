@@ -10,6 +10,13 @@
   --color-textLight: #515151;
 }
 
+@layer base {
+  body {
+    overflow-x: hidden;
+  }
+}
+
+
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;

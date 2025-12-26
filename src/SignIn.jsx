@@ -146,28 +146,142 @@ function SignIn() {
             </div>
 
             {/* Right Side: Artistic Visual */}
-            <div className="hidden md:flex w-1/2 bg-zinc-900 relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-transparent to-zinc-900 z-10" />
+            <div className="hidden md:flex w-1/2 bg-[#0A0A0A] relative overflow-hidden items-center justify-center">
 
-                {/* Abstract Image */}
-                <img
-                    src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop"
-                    alt="Abstract Art"
-                    className="absolute inset-0 w-full h-full object-cover opacity-60"
+                {/* Animated Gradient Orbs */}
+                <div className="absolute inset-0">
+                    {/* Large gradient orb - top right */}
+                    <motion.div
+                        animate={{
+                            scale: [1, 1.2, 1],
+                            x: [0, 30, 0],
+                            y: [0, -20, 0],
+                        }}
+                        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+                        className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full"
+                        style={{
+                            background: 'radial-gradient(circle, rgba(139,92,246,0.3) 0%, rgba(139,92,246,0) 70%)',
+                        }}
+                    />
+
+                    {/* Medium orb - center left */}
+                    <motion.div
+                        animate={{
+                            scale: [1, 1.3, 1],
+                            x: [0, -20, 0],
+                            y: [0, 30, 0],
+                        }}
+                        transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+                        className="absolute top-1/3 -left-20 w-[400px] h-[400px] rounded-full"
+                        style={{
+                            background: 'radial-gradient(circle, rgba(59,130,246,0.25) 0%, rgba(59,130,246,0) 70%)',
+                        }}
+                    />
+
+                    {/* Small orb - bottom */}
+                    <motion.div
+                        animate={{
+                            scale: [1, 1.4, 1],
+                            x: [0, 40, 0],
+                            y: [0, -30, 0],
+                        }}
+                        transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+                        className="absolute -bottom-20 right-1/4 w-[300px] h-[300px] rounded-full"
+                        style={{
+                            background: 'radial-gradient(circle, rgba(236,72,153,0.2) 0%, rgba(236,72,153,0) 70%)',
+                        }}
+                    />
+
+                    {/* Accent orb - orange */}
+                    <motion.div
+                        animate={{
+                            scale: [1, 1.2, 1],
+                            rotate: [0, 180, 360],
+                        }}
+                        transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+                        className="absolute top-1/2 right-1/3 w-[200px] h-[200px] rounded-full"
+                        style={{
+                            background: 'radial-gradient(circle, rgba(251,146,60,0.15) 0%, rgba(251,146,60,0) 70%)',
+                        }}
+                    />
+                </div>
+
+                {/* Grid Pattern Overlay */}
+                <div
+                    className="absolute inset-0 opacity-[0.03]"
+                    style={{
+                        backgroundImage: `
+                            linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+                            linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)
+                        `,
+                        backgroundSize: '50px 50px'
+                    }}
                 />
 
-                {/* Content Overlay */}
-                <div className="absolute bottom-0 left-0 right-0 p-16 z-20">
+                {/* Abstract Geometric Shapes */}
+                <div className="absolute inset-0">
+                    {/* Floating rings */}
+                    <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
+                        className="absolute top-1/4 right-1/4 w-64 h-64 rounded-full border border-white/5"
+                    />
+                    <motion.div
+                        animate={{ rotate: -360 }}
+                        transition={{ duration: 45, repeat: Infinity, ease: "linear" }}
+                        className="absolute top-1/3 right-1/3 w-48 h-48 rounded-full border border-white/5"
+                    />
+                    <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+                        className="absolute bottom-1/4 left-1/4 w-32 h-32 rounded-full border border-white/[0.03]"
+                    />
+                </div>
+
+                {/* Noise Texture Overlay */}
+                <div
+                    className="absolute inset-0 opacity-[0.15]"
+                    style={{
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+                    }}
+                />
+
+                {/* Center Logo/Brand Element */}
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.5, duration: 1 }}
+                    className="relative z-10 text-center"
+                >
+                    <div className="w-24 h-24 mx-auto mb-8 relative">
+                        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-3xl blur-xl" />
+                        <div className="relative w-full h-full bg-white/5 backdrop-blur-sm rounded-3xl border border-white/10 flex items-center justify-center">
+                            <img src="/logo.svg" alt="QueueAI" className="w-12 h-12" />
+                        </div>
+                    </div>
+                    <h3 className="text-2xl font-light text-white/80 mb-2">QueueAI</h3>
+                    <p className="text-sm text-white/40">The Ultimate AI Workspace</p>
+                </motion.div>
+
+                {/* Content Overlay - Bottom */}
+                <div className="absolute bottom-0 left-0 right-0 p-12 z-20">
                     <div className="max-w-md">
-                        <div className="w-16 h-1 bg-white mb-8"></div>
-                        <h3 className="text-3xl font-light text-white mb-4 leading-tight">
+                        <div className="flex gap-1 mb-6">
+                            <div className="w-8 h-1 bg-purple-500 rounded-full" />
+                            <div className="w-4 h-1 bg-blue-500 rounded-full" />
+                            <div className="w-2 h-1 bg-pink-500 rounded-full" />
+                        </div>
+                        <h3 className="text-2xl font-light text-white/90 mb-3 leading-tight">
                             "The artifacts of intelligence are not just answers, but new questions."
                         </h3>
-                        <p className="text-zinc-400 text-sm">
+                        <p className="text-white/40 text-sm">
                             Exploring the symbiosis of human intent and synthetic execution.
                         </p>
                     </div>
                 </div>
+
+                {/* Subtle vignette */}
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-transparent to-[#0A0A0A]/50 pointer-events-none" />
             </div>
         </div>
     );

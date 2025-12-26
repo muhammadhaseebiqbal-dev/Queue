@@ -2,13 +2,35 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ArrowRight, Sparkles, Zap, Brain, MessageSquare, Layers, Command } from "lucide-react";
 import { useAuth } from "./context/AuthContext";
+import { Helmet } from "react-helmet-async";
 
 function LandingPage() {
     const { token } = useAuth();
     const destination = token ? "/app" : "/signin";
 
     return (
-        <div className="min-h-screen bg-[#0A0A0A] text-white selection:bg-indigo-500/30 overflow-x-hidden font-sans">
+        <div className="min-h-screen bg-[#0A0A0A] text-white selection:bg-indigo-500/30 font-sans">
+            <Helmet>
+                <title>QueueAI - The Ultimate Multi-Model AI Workspace</title>
+                <meta name="description" content="Unlock the power of multiple AI models in one workspace. Chat with GPT, Claude, Llama, and specialized Personas. Features persistent memory, file uploads, and voice interaction." />
+                <meta name="keywords" content="AI workspace, Multi-model AI, GPT wrapper, Claude alternative, AI personas, Developer AI tools" />
+
+                {/* Open Graph / Facebook */}
+                <meta property="og:type" content="website" />
+                <meta property="og:url" content="https://queueai.com/" />
+                <meta property="og:title" content="QueueAI - The Ultimate Multi-Model AI Workspace" />
+                <meta property="og:description" content="Chat with specialised AI personas, use multiple models (GPT, Llama, Qwen), and keep your context forever. The workspace for power users." />
+                <meta property="og:image" content="https://queueai.com/og-image.jpg" />
+
+                {/* Twitter */}
+                <meta property="twitter:card" content="summary_large_image" />
+                <meta property="twitter:url" content="https://queueai.com/" />
+                <meta property="twitter:title" content="QueueAI - The Ultimate Multi-Model AI Workspace" />
+                <meta property="twitter:description" content="Chat with specialised AI personas, use multiple models (GPT, Llama, Qwen), and keep your context forever." />
+                <meta property="twitter:image" content="https://queueai.com/og-image.jpg" />
+
+                <link rel="canonical" href="https://queueai.com/" />
+            </Helmet>
 
             {/* Floating Navbar (Mobbin Style) */}
             <div className="fixed top-6 left-0 right-0 z-50 flex justify-center px-6">
@@ -37,7 +59,7 @@ function LandingPage() {
             </div>
 
             {/* Hero Section */}
-            <section className="relative pt-40 pb-20 px-6">
+            <section className="relative min-h-screen flex items-center justify-center px-6">
                 {/* Background Glow - Neutral */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-white/5 blur-[120px] rounded-full pointer-events-none" />
 
@@ -55,7 +77,7 @@ function LandingPage() {
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
                             </span>
-                            v2.5.0 Now Available with Cross-Platform Auth
+                            v3.0.1 Now Available with AI Personas & NSFW Detection
                         </motion.div>
                     </Link>
 
@@ -127,106 +149,151 @@ function LandingPage() {
                 </div>
             </section>
 
-            {/* SECTION 3: Persistent Workspace */}
-            <section className="py-24 px-6 relative">
-                <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-16 items-center">
-                    <div>
-                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-medium mb-6">
-                            Workspace
+            {/* STACKED SECTIONS CONTAINER */}
+            <div className="relative">
+                {/* SECTION: AI Personas */}
+                <section className="sticky top-0 min-h-screen py-24 px-6 relative overflow-hidden bg-[#0A0A0A] z-10 flex items-center border-t border-white/5">
+                    {/* Background Glow */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-white/5 blur-[100px] rounded-full pointer-events-none" />
+
+                    <div className="max-w-6xl mx-auto relative z-10 w-full">
+                        <div className="text-center mb-16">
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-pink-500/10 border border-pink-500/20 text-pink-400 text-xs font-medium mb-6">
+                                <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-pink-400"></span>
+                                </span>
+                                New in v3.0.1
+                            </div>
+                            <h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">AI Personas</h2>
+                            <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
+                                Chat with specialized AI personalities. Each persona has unique expertise and maintains its own conversation history.
+                            </p>
                         </div>
-                        <h2 className="text-3xl md:text-5xl font-bold mb-6 text-white leading-tight">
-                            Memory that <br />
-                            <span className="text-zinc-500">Persists.</span>
-                        </h2>
-                        <div className="space-y-8 mt-8">
+
+                        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {[
-                                { title: "Project Organization", desc: "Group related chats into dedicated Projects to keep your workspace clean." },
-                                { title: "Context Awareness", desc: "AI remembers previous messages in the session, even after you refresh or switch devices." },
-                                { title: "Cross-Platform Sync", desc: "Start on your laptop, continue on your phone. Your history travels with you." }
-                            ].map((item, i) => (
-                                <div key={i} className="flex gap-4">
-                                    <div className="w-px h-full bg-white/10 relative">
-                                        <div className="absolute top-2 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-zinc-800 border border-white/20" />
-                                    </div>
-                                    <div className="pb-8">
-                                        <h3 className="text-lg font-semibold text-white mb-1">{item.title}</h3>
-                                        <p className="text-zinc-400 text-sm leading-relaxed">{item.desc}</p>
-                                    </div>
+                                { emoji: "🧬", name: "Nikola Tesla", category: "Scientists", desc: "Inventor and electrical engineer with revolutionary ideas." },
+                                { emoji: "🎭", name: "Shakespeare", category: "Writers", desc: "Master of dramatic arts and poetic expression." },
+                                { emoji: "💼", name: "Warren Buffett", category: "Business", desc: "Investment wisdom and financial strategy." },
+                                { emoji: "🧠", name: "Socrates", category: "Philosophers", desc: "Deep questioning and philosophical dialogue." }
+                            ].map((persona, i) => (
+                                <div key={i} className="bg-zinc-900/50 border border-white/10 rounded-2xl p-6 hover:bg-white/5 transition-all hover:border-white/20 hover:scale-[1.02] group">
+                                    <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">{persona.emoji}</div>
+                                    <div className="text-xs font-mono text-pink-400 mb-2 uppercase tracking-wider">{persona.category}</div>
+                                    <h3 className="text-lg font-bold text-white mb-2">{persona.name}</h3>
+                                    <p className="text-sm text-zinc-500">{persona.desc}</p>
                                 </div>
                             ))}
                         </div>
-                    </div>
-                    {/* Visual representation of workspace */}
-                    <div className="bg-zinc-900 border border-white/10 rounded-3xl p-8 aspect-square flex flex-col items-center justify-center relative overflow-hidden">
-                        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent opacity-50" />
-                        <Layers size={64} className="text-white/20 mb-6" />
-                        <div className="text-center relative z-10">
-                            <div className="bg-zinc-800 rounded-lg p-3 mb-3 border border-white/5 w-48 mx-auto flex items-center gap-3">
-                                <div className="w-3 h-3 rounded-full bg-green-500" />
-                                <span className="text-xs text-zinc-300">Project Alpha</span>
-                            </div>
-                            <div className="bg-zinc-800 rounded-lg p-3 mb-3 border border-white/5 w-48 mx-auto flex items-center gap-3 opacity-60">
-                                <div className="w-3 h-3 rounded-full bg-blue-500" />
-                                <span className="text-xs text-zinc-300">Website Redesign</span>
-                            </div>
-                            <div className="bg-zinc-800 rounded-lg p-3 border border-white/5 w-48 mx-auto flex items-center gap-3 opacity-40">
-                                <div className="w-3 h-3 rounded-full bg-orange-500" />
-                                <span className="text-xs text-zinc-300">Marketing Assets</span>
-                            </div>
+
+                        <div className="mt-12 text-center">
+                            <p className="text-zinc-500 text-sm">20+ personas across Scientists, Philosophers, Business Leaders, Writers & more</p>
                         </div>
                     </div>
-                </div>
-            </section>
+                </section>
 
-            {/* SECTION 4: Vision & Voice */}
-            <section className="py-24 px-6 bg-white/[0.02]">
-                <div className="max-w-6xl mx-auto">
-                    <div className="text-center mb-16">
-                        <h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">See. Speak. Create.</h2>
-                        <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
-                            Multimodal capabilities that expand how you interact with AI.
-                        </p>
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-6">
-                        {/* Vision Card */}
-                        <div className="bg-zinc-900 border border-white/10 rounded-3xl p-10 flex flex-col relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
-                                <Sparkles size={120} />
+                {/* SECTION 3: Persistent Workspace */}
+                <section className="sticky top-0 min-h-screen py-24 px-6 relative bg-[#0C0C0C] z-20 flex items-center border-t border-white/10 shadow-[0_-20px_40px_rgba(0,0,0,0.5)]">
+                    <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-16 items-center w-full">
+                        <div>
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-medium mb-6">
+                                Workspace
                             </div>
-                            <div className="relative z-10">
-                                <div className="w-12 h-12 bg-indigo-500/20 rounded-xl flex items-center justify-center mb-6 text-indigo-400">
-                                    <Sparkles size={24} />
+                            <h2 className="text-3xl md:text-5xl font-bold mb-6 text-white leading-tight">
+                                Memory that <br />
+                                <span className="text-zinc-500">Persists.</span>
+                            </h2>
+                            <div className="space-y-8 mt-8">
+                                {[
+                                    { title: "Project Organization", desc: "Group related chats into dedicated Projects to keep your workspace clean." },
+                                    { title: "Context Awareness", desc: "AI remembers previous messages in the session, even after you refresh or switch devices." },
+                                    { title: "Cross-Platform Sync", desc: "Start on your laptop, continue on your phone. Your history travels with you." }
+                                ].map((item, i) => (
+                                    <div key={i} className="flex gap-4">
+                                        <div className="w-px h-full bg-white/10 relative">
+                                            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-zinc-800 border border-white/20" />
+                                        </div>
+                                        <div className="pb-8">
+                                            <h3 className="text-lg font-semibold text-white mb-1">{item.title}</h3>
+                                            <p className="text-zinc-400 text-sm leading-relaxed">{item.desc}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        {/* Visual representation of workspace */}
+                        <div className="bg-zinc-900 border border-white/10 rounded-3xl p-8 aspect-square flex flex-col items-center justify-center relative overflow-hidden shadow-2xl">
+                            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent opacity-50" />
+                            <Layers size={64} className="text-white/20 mb-6" />
+                            <div className="text-center relative z-10">
+                                <div className="bg-zinc-800 rounded-lg p-3 mb-3 border border-white/5 w-48 mx-auto flex items-center gap-3">
+                                    <div className="w-3 h-3 rounded-full bg-green-500" />
+                                    <span className="text-xs text-zinc-300">Project Alpha</span>
                                 </div>
-                                <h3 className="text-2xl font-bold text-white mb-3">Vision Analysis</h3>
-                                <p className="text-zinc-400 mb-6">Upload images to get instant analysis, code generation from UI screenshots, or detailed descriptions.</p>
-                                <ul className="space-y-2 text-sm text-zinc-500">
-                                    <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" /> PNG, JPG support</li>
-                                    <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" /> Cloudinary storage</li>
-                                </ul>
-                            </div>
-                        </div>
-
-                        {/* Voice Card */}
-                        <div className="bg-zinc-900 border border-white/10 rounded-3xl p-10 flex flex-col relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
-                                <Zap size={120} />
-                            </div>
-                            <div className="relative z-10">
-                                <div className="w-12 h-12 bg-orange-500/20 rounded-xl flex items-center justify-center mb-6 text-orange-400">
-                                    <Zap size={24} />
+                                <div className="bg-zinc-800 rounded-lg p-3 mb-3 border border-white/5 w-48 mx-auto flex items-center gap-3 opacity-60">
+                                    <div className="w-3 h-3 rounded-full bg-blue-500" />
+                                    <span className="text-xs text-zinc-300">Website Redesign</span>
                                 </div>
-                                <h3 className="text-2xl font-bold text-white mb-3">Voice Interaction</h3>
-                                <p className="text-zinc-400 mb-6">Speak naturally to QueueAI. Advanced speech-to-text captures your intent without typing.</p>
-                                <ul className="space-y-2 text-sm text-zinc-500">
-                                    <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-orange-500 rounded-full" /> Whisper Turbo integration</li>
-                                    <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-orange-500 rounded-full" /> Hands-free coding</li>
-                                </ul>
+                                <div className="bg-zinc-800 rounded-lg p-3 border border-white/5 w-48 mx-auto flex items-center gap-3 opacity-40">
+                                    <div className="w-3 h-3 rounded-full bg-orange-500" />
+                                    <span className="text-xs text-zinc-300">Marketing Assets</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </section>
+                </section>
+
+                {/* SECTION 4: Vision & Voice */}
+                <section className="sticky top-0 min-h-screen py-24 px-6 bg-[#0E0E0E] z-30 flex items-center border-t border-white/10 shadow-[0_-20px_40px_rgba(0,0,0,0.5)]">
+                    <div className="max-w-6xl mx-auto w-full">
+                        <div className="text-center mb-16">
+                            <h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">See. Speak. Create.</h2>
+                            <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
+                                Multimodal capabilities that expand how you interact with AI.
+                            </p>
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-6">
+                            {/* Vision Card */}
+                            <div className="bg-zinc-900 border border-white/10 rounded-3xl p-10 flex flex-col relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+                                    <Sparkles size={120} />
+                                </div>
+                                <div className="relative z-10">
+                                    <div className="w-12 h-12 bg-indigo-500/20 rounded-xl flex items-center justify-center mb-6 text-indigo-400">
+                                        <Sparkles size={24} />
+                                    </div>
+                                    <h3 className="text-2xl font-bold text-white mb-3">Vision Analysis</h3>
+                                    <p className="text-zinc-400 mb-6">Upload images to get instant analysis, code generation from UI screenshots, or detailed descriptions.</p>
+                                    <ul className="space-y-2 text-sm text-zinc-500">
+                                        <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" /> PNG, JPG support</li>
+                                        <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" /> Cloudinary storage</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            {/* Voice Card */}
+                            <div className="bg-zinc-900 border border-white/10 rounded-3xl p-10 flex flex-col relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+                                    <Zap size={120} />
+                                </div>
+                                <div className="relative z-10">
+                                    <div className="w-12 h-12 bg-orange-500/20 rounded-xl flex items-center justify-center mb-6 text-orange-400">
+                                        <Zap size={24} />
+                                    </div>
+                                    <h3 className="text-2xl font-bold text-white mb-3">Voice Interaction</h3>
+                                    <p className="text-zinc-400 mb-6">Speak naturally to QueueAI. Advanced speech-to-text captures your intent without typing.</p>
+                                    <ul className="space-y-2 text-sm text-zinc-500">
+                                        <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-orange-500 rounded-full" /> Whisper Turbo integration</li>
+                                        <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-orange-500 rounded-full" /> Hands-free coding</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
 
             {/* SECTION 5: Smart Features */}
             <section className="py-24 px-6 border-b border-white/5">
@@ -298,10 +365,6 @@ function LandingPage() {
                     <div className="flex flex-wrap gap-6">
                         <Link to="/changelog" className="text-sm text-zinc-500 hover:text-white transition-colors">Changelog</Link>
                         <a href="#features" className="text-sm text-zinc-500 hover:text-white transition-colors">Features</a>
-                        <a href="#" className="text-sm text-zinc-500 hover:text-white transition-colors">Documentation</a>
-                        <a href="#" className="text-sm text-zinc-500 hover:text-white transition-colors">Twitter</a>
-                        <a href="#" className="text-sm text-zinc-500 hover:text-white transition-colors">GitHub</a>
-                        <a href="#" className="text-sm text-zinc-500 hover:text-white transition-colors">Discord</a>
                     </div>
                 </div>
             </footer>
