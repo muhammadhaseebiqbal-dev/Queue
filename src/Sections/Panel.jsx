@@ -174,6 +174,43 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
         }
     };
 
+    // Sajid Password State
+    const [showSajidModal, setShowSajidModal] = useState(false);
+    const [sajidPassword, setSajidPassword] = useState('');
+    const [pendingSajidPersona, setPendingSajidPersona] = useState(null);
+    const [passwordError, setPasswordError] = useState(false);
+
+    const handlePersonaActivation = async (persona) => {
+        if (PanelInteractionVars.setActivePersona) {
+            PanelInteractionVars.setActivePersona(persona);
+
+            // Find existing session for this persona
+            const existingPersonaSession = chats.find(chat => chat.personaId === persona.id);
+
+            if (existingPersonaSession) {
+                // Continue existing conversation
+                PanelInteractionVars.setActiveSessionId(existingPersonaSession.id);
+            } else {
+                // Start new conversation (will be created on first message)
+                PanelInteractionVars.setActiveSessionId(null);
+            }
+
+            PanelInteractionVars.setActiveProject && PanelInteractionVars.setActiveProject(null);
+        }
+    };
+
+    const handleSajidUnlock = () => {
+        if (sajidPassword === 'dipole') {
+            handlePersonaActivation(pendingSajidPersona);
+            setShowSajidModal(false);
+            setSajidPassword('');
+            setPendingSajidPersona(null);
+            setPasswordError(false);
+        } else {
+            setPasswordError(true);
+        }
+    };
+
     // Animation variants for tab content
     const tabVariants = {
         hidden: { opacity: 0, x: -20 },
@@ -265,25 +302,12 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                                     <PersonasView
                                         personaChats={chats.filter(chat => chat.personaId)}
                                         onSelect={async (persona) => {
-
-                                            if (PanelInteractionVars.setActivePersona) {
-                                                PanelInteractionVars.setActivePersona(persona);
-
-                                                // Find existing session for this persona
-                                                const existingPersonaSession = chats.find(chat => chat.personaId === persona.id);
-
-                                                if (existingPersonaSession) {
-                                                    // Continue existing conversation
-
-                                                    PanelInteractionVars.setActiveSessionId(existingPersonaSession.id);
-                                                } else {
-                                                    // Start new conversation (will be created on first message)
-
-                                                    PanelInteractionVars.setActiveSessionId(null);
-                                                }
-
-                                                PanelInteractionVars.setActiveProject && PanelInteractionVars.setActiveProject(null);
+                                            if (persona.id === 'sajid') {
+                                                setPendingSajidPersona(persona);
+                                                setShowSajidModal(true);
+                                                return;
                                             }
+                                            handlePersonaActivation(persona);
                                         }} />
                                 </motion.div>
                             )}
@@ -536,6 +560,69 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                                         className="flex-1 bg-text hover:bg-text/90 border-2 border-text rounded-lg px-4 py-2 text-sm text-primary font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Create
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Sajid Password Modal */}
+                <AnimatePresence>
+                    {showSajidModal && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[110]"
+                            onClick={() => {
+                                setShowSajidModal(false);
+                                setPasswordError(false);
+                                setSajidPassword('');
+                            }}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="bg-[#1a1a1a] border border-red-500/30 rounded-2xl p-8 w-80 shadow-2xl relative overflow-hidden"
+                            >
+                                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-red-500"></div>
+
+                                <div className="text-center mb-6">
+                                    <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
+                                        <span className="text-3xl">🔒</span>
+                                    </div>
+                                    <h3 className="text-xl font-bold text-white mb-1">Restricted Persona</h3>
+                                    <p className="text-xs text-zinc-400">Security Clearance Required</p>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-xs font-mono text-indigo-400 mb-2 block uppercase tracking-widest">Passcode</label>
+                                        <input
+                                            type="password"
+                                            value={sajidPassword}
+                                            onChange={(e) => {
+                                                setSajidPassword(e.target.value);
+                                                setPasswordError(false);
+                                            }}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleSajidUnlock()}
+                                            placeholder="Enter secret code..."
+                                            className={`w-full bg-black/50 border-2 ${passwordError ? 'border-red-500 animate-shake' : 'border-zinc-700'} rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-indigo-500 transition-all font-mono tracking-widest text-center`}
+                                            autoFocus
+                                        />
+                                        {passwordError && (
+                                            <p className="text-red-500 text-xs mt-2 text-center font-bold">⚠️ ACCESS DENIED</p>
+                                        )}
+                                    </div>
+
+                                    <button
+                                        onClick={handleSajidUnlock}
+                                        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-lg transition-all shadow-lg shadow-indigo-500/20 active:scale-95 flex items-center justify-center gap-2"
+                                    >
+                                        <span className="uppercase tracking-wide text-xs">Unlock Persona</span>
                                     </button>
                                 </div>
                             </motion.div>

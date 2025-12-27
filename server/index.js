@@ -631,12 +631,29 @@ app.post('/prepare-stream', async (req, res) => {
     if (projectId && (!chatContexts[userId] || chatContexts[userId].messages.length === 0)) {
         try {
             const project = await Project.findById(projectId);
-            if (project && project.description) {
-                console.log(`[Stream] Injecting context from project: ${project.name}`);
-                contextMessages.unshift({
-                    role: 'system',
-                    content: `[PROJECT CONTEXT: ${project.name}]\n${project.description}\n\n(Use this context to guide your responses for this conversation)`
-                });
+            if (project) {
+                let contextContent = `[PROJECT CONTEXT: ${project.name}]\n`;
+
+                if (project.description) {
+                    contextContent += `DESCRIPTION:\n${project.description}\n\n`;
+                }
+
+                if (project.documents && project.documents.length > 0) {
+                    const docContext = project.documents
+                        .map(doc => `[DOCUMENT: ${doc.name}]\n${doc.content.substring(0, 5000)}...`)
+                        .join('\n\n');
+                    contextContent += `UPLOADED DOCUMENTS:\n${docContext}\n\n`;
+                }
+
+                contextContent += `(Use this context to guide your responses for this conversation)`;
+
+                if (project.description || (project.documents && project.documents.length > 0)) {
+                    console.log(`[Stream] Injecting context from project: ${project.name} (Docs: ${project.documents?.length || 0})`);
+                    contextMessages.unshift({
+                        role: 'system',
+                        content: contextContent
+                    });
+                }
             }
         } catch (err) {
             console.error('[Stream] Failed to load project context:', err);
@@ -720,7 +737,7 @@ app.get('/stream/:id', async (req, res) => {
             : [
                 {
                     role: 'system',
-                    content: 'You are Queue, a helpful AI assistant created by Haseeb Iqbal. When explaining mathematical concepts, formulas, equations, or physics problems, ALWAYS use LaTeX notation. Use inline LaTeX with single dollar signs $...$ for inline formulas and double dollar signs $$...$$ for display equations. For example: "The quadratic formula is $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$" or for display mode use $$E=mc^2$$. Always format mathematical expressions properly in LaTeX.'
+                    content: 'You are Queue, a helpful AI assistant created by Haseeb Iqbal. \n1. **Math**: ALWAYS use LaTeX ($...$, $$...$$).\n2. **Canvas Artifacts**: If generating substantial code, diagrams, or docs, WRAP them in `<canvas-content type="TYPE" title="TITLE">CONTENT</canvas-content>`. Supported types: `mermaid`, `html`, `react`, `markdown`. Do NOT put the content in the main chat if wrapped.'
                 },
                 ...cleanedMessages
             ];
@@ -1014,11 +1031,14 @@ app.get('/stream/:id', async (req, res) => {
         for await (const chunk of chatCompletion) {
             const content = chunk.choices[0]?.delta?.content || '';
             if (content && typeof content === 'string') {
-                res.write(`data: ${JSON.stringify({ content })}\n\n`);
+                res.write(`data: ${JSON.stringify({ type: 'content', content })}\n\n`);
             }
         }
 
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+
+        // Give the client time to process the 'done' message before closing connection
+        await new Promise(resolve => setTimeout(resolve, 100));
         res.end();
 
         // Clean up store
@@ -1425,7 +1445,7 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
             : [
                 {
                     role: 'system',
-                    content: 'You are a hyper-intelligent AI assistant capable of deep reasoning and critical analysis. Your goal is to provide the most accurate, comprehensive, and hallucination-free answer possible.\n1. **Fact-Checking**: Verify every claim. If you differ from standard consensus, provide strong evidence.\n2. **Hallucination Prevention**: If you do not know something, explicitly state it. Do not invent facts, citations, or data.\n3. **Deep Reasoning**: THink step-by-step before answering complex queries.\n4. **LaTeX**: ALWAYS use LaTeX for math/physics ($...$ for inline, $$...$$ for display).\n5. **Tone**: Authoritative, precise, yet helpful.'
+                    content: 'You are a hyper-intelligent AI assistant capable of deep reasoning and critical analysis. Your goal is to provide the most accurate, comprehensive, and hallucination-free answer possible.\n1. **Fact-Checking**: Verify every claim. If you differ from standard consensus, provide strong evidence.\n2. **Hallucination Prevention**: If you do not know something, explicitly state it. Do not invent facts, citations, or data.\n3. **Deep Reasoning**: THink step-by-step before answering complex queries.\n4. **LaTeX**: ALWAYS use LaTeX for math/physics ($...$ for inline, $$...$$ for display).\n5. **Tone**: Authoritative, precise, yet helpful.\n6. **Canvas Artifacts**: If you generate substantial code (HTML/React apps), Mermaid diagrams, or long Markdown reports, YOU MUST WRAP THEM in a `<canvas-content>` tag so they render in the side panel. Do NOT put them in the main chat. \n   - **Syntax**: `<canvas-content type="TYPE" title="TITLE">CONTENT</canvas-content>`\n   - **Types**: `mermaid` (for diagrams), `html` (for web apps), `react` (for components), `markdown` (for docs).\n   - **Example**: `<canvas-content type="mermaid" title="Flowchart">graph TD; A-->B;</canvas-content>`'
                 },
                 ...session.messages
             ];
@@ -1644,46 +1664,92 @@ app.post('/api/personas/chat', async (req, res) => {
             parts: [{ text: message }]
         });
 
-        // 4. Generate Stream using correct SDK pattern
-        const response = await ai.models.generateContentStream({
-            model,
-            config,
-            contents
-        });
+        // 5. Generate Stream (with Fallback)
+        try {
+            console.log(`[Persona] Trying Gemini 2.5 for ${persona.name}...`);
+            const response = await ai.models.generateContentStream({
+                model,
+                config,
+                contents
+            });
 
-        // 5. Stream Response
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
+            // Stream Response
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
 
-        for await (const chunk of response) {
-            console.log('[Persona] Chunk received:', JSON.stringify(chunk, null, 2));
+            for await (const chunk of response) {
+                let chunkText = null;
+                if (typeof chunk.text === 'function') {
+                    chunkText = chunk.text();
+                } else if (chunk.text) {
+                    chunkText = chunk.text;
+                } else if (chunk.candidates && chunk.candidates[0]?.content?.parts) {
+                    chunkText = chunk.candidates[0].content.parts.map(p => p.text).join('');
+                }
 
-            // Try different ways to extract text
-            let chunkText = null;
-
-            if (typeof chunk.text === 'function') {
-                chunkText = chunk.text();
-            } else if (chunk.text) {
-                chunkText = chunk.text;
-            } else if (chunk.candidates && chunk.candidates[0]?.content?.parts) {
-                chunkText = chunk.candidates[0].content.parts.map(p => p.text).join('');
+                if (chunkText) {
+                    res.write(`data: ${JSON.stringify({ content: chunkText })}\n\n`);
+                }
             }
+            res.write('data: [DONE]\n\n');
+            res.end();
 
-            console.log('[Persona] Extracted text:', chunkText);
+        } catch (geminiError) {
+            console.error('[Persona] Gemini Failed:', geminiError.message);
+            console.log('[Persona] ⚠️ Switching to Fallback: GPT-OSS (Llama 3.3)...');
 
-            if (chunkText) {
-                // Send standard SSE format
-                res.write(`data: ${JSON.stringify({ content: chunkText })}\n\n`);
+            try {
+                // Construct Messages for Groq (OpenAI Format)
+                const groqMessages = [
+                    { role: 'system', content: persona.systemPrompt },
+                    ...(previousMessages || []).map(m => ({
+                        role: m.role,
+                        content: m.content
+                    })),
+                    { role: 'user', content: message }
+                ];
+
+                const stream = await groq.chat.completions.create({
+                    messages: groqMessages,
+                    model: 'llama-3.3-70b-versatile', // Fallback Model
+                    temperature: 0.7,
+                    max_completion_tokens: 1024,
+                    stream: true
+                });
+
+                // Ensure headers are set if not already
+                if (!res.headersSent) {
+                    res.setHeader('Content-Type', 'text/event-stream');
+                    res.setHeader('Cache-Control', 'no-cache');
+                    res.setHeader('Connection', 'keep-alive');
+                }
+
+                for await (const chunk of stream) {
+                    const content = chunk.choices[0]?.delta?.content || "";
+                    if (content) {
+                        res.write(`data: ${JSON.stringify({ content })}\n\n`);
+                    }
+                }
+                res.write('data: [DONE]\n\n');
+                res.end();
+
+            } catch (fallbackError) {
+                console.error('[Persona] CRITICAL: Fallback also failed:', fallbackError);
+                if (!res.headersSent) {
+                    res.status(500).json({ error: "All AI services unavailable at the moment." });
+                } else {
+                    res.write(`data: ${JSON.stringify({ error: "System overload. Please try again." })}\n\n`);
+                    res.end();
+                }
             }
         }
 
-        res.write('data: [DONE]\n\n');
-        res.end();
-
     } catch (error) {
-        console.error('Persona Chat Error:', error);
-        res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+        console.error('Persona Chat Error (General):', error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: error.message });
+        }
         res.end();
     }
 });

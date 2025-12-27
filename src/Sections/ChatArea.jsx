@@ -1,4 +1,4 @@
-import { Copy, Sparkles, Image as ImageIcon, FileText, PanelRightOpen, X, ThumbsUp, ThumbsDown, Check, Bot, Rocket, Mountain, Moon, ChevronDown, Trash2, MoreVertical, LogOut, Columns } from "lucide-react";
+import { Copy, Sparkles, Image as ImageIcon, FileText, PanelRightOpen, X, ThumbsUp, ThumbsDown, Check, Bot, Rocket, Mountain, Moon, ChevronDown, Trash2, MoreVertical, LogOut, Columns, Activity, Code, Maximize2 } from "lucide-react";
 import WelcomeScreen from "../components/ui/WelcomeScreen";
 import SideBySideGrid from "../components/ui/SideBySideGrid";
 import AiInput from "../components/ui/AiInput"
@@ -711,38 +711,148 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
 
                 let data;
                 try {
+                    // DEBUG LOG
+                    // console.log('[Stream Raw]', event.data); 
                     data = JSON.parse(event.data);
-
+                    if (data.type === 'content') {
+                        console.log('[Stream Content Chunk]', data.content);
+                    }
                 } catch (e) {
                     console.error('[Stream] JSON Parse Error:', e);
-                    return; // Skip invalid chunks
+                    return;
                 }
 
-                if (data.done) {
-                    eventSourceRef.current.close();
-                    setIsStreaming(false);
-                    // Mark search as done if it was active
-                    setcontext(prev => {
-                        const updated = [...prev];
-                        if (updated.length > 0) {
-                            // Fix: Ensure we mark the specific message as not streaming
-                            updated[updated.length - 1].streaming = false;
+                if (data.type === 'content') {
+                    console.log('[CANVAS DEBUG] Content chunk received:', data.content.substring(0, 100));
 
-                            // Also mark search as done if needed
-                            if (updated[updated.length - 1].searchStatus === 'searching') {
-                                updated[updated.length - 1].searchStatus = 'done';
+                    // --- STATE-BASED CANVAS PARSER ---
+                    if (!eventSourceRef.current.artifactState) {
+                        console.log('[CANVAS DEBUG] Initializing artifact state');
+                        eventSourceRef.current.artifactState = {
+                            isOpen: false,
+                            type: '',
+                            title: '',
+                            buffer: '',
+                            rawStream: ''
+                        };
+                    }
+                    const state = eventSourceRef.current.artifactState;
+                    state.rawStream += data.content;
+                    streamingMessageRef.current = state.rawStream;
+
+                    const chunk = data.content;
+
+                    // CHECK 1: Are we already inside an artifact?
+                    if (state.isOpen) {
+                        console.log('[CANVAS DEBUG] Artifact is open, buffering content');
+                        // Check for closing tag in this chunk (or accumulated buffer)
+                        if (chunk.includes('</canvas-content>')) {
+                            console.log('[CANVAS DEBUG] Found closing tag, finalizing artifact');
+                            const [contentBeforeClose] = chunk.split('</canvas-content>');
+                            state.buffer += contentBeforeClose;
+
+                            // Finalize Artifact
+                            console.log('[CANVAS DEBUG] Checking PanelInteractionVars.triggerCanvas:', typeof PanelInteractionVars.triggerCanvas);
+                            if (PanelInteractionVars.triggerCanvas) {
+                                console.log('[CANVAS DEBUG] Calling triggerCanvas with type:', state.type, 'title:', state.title);
+                                PanelInteractionVars.triggerCanvas(state.type, state.buffer, state.title);
+                            } else {
+                                console.error('[CANVAS DEBUG] triggerCanvas is NOT available!');
+                            }
+                            state.isOpen = false;
+
+                            // Update UI to show "View Artifact"
+                            const startMarker = '<canvas-content';
+                            const startIndex = state.rawStream.lastIndexOf(startMarker);
+                            if (startIndex !== -1) {
+                                // HIDE the raw tag in the chat
+                                const cleanDisplay = state.rawStream.substring(0, startIndex) + '\n\n*(View Artifact in Side Panel)*';
+                                streamingMessageRef.current = cleanDisplay;
+                            }
+                        } else {
+                            // Still open, append and stream
+                            state.buffer += chunk;
+                            if (PanelInteractionVars.triggerCanvas) {
+                                // Throttled update could be better, but direct is fine for now
+                                setTimeout(() => {
+                                    PanelInteractionVars.triggerCanvas(state.type, state.buffer, state.title);
+                                }, 0);
                             }
                         }
-                        return updated;
-                    });
-                    return;
-                }
+                    }
+                    // CHECK 2: Start of new artifact?
+                    else if (!state.isOpen && state.rawStream.includes('<canvas-content')) {
+                        console.log('[CANVAS DEBUG] Detected canvas-content tag start');
+                        const tagStartIndex = state.rawStream.indexOf('<canvas-content');
+                        const sampleEnd = Math.min(tagStartIndex + 150, state.rawStream.length);
+                        console.log('[CANVAS DEBUG] Raw stream sample:', state.rawStream.substring(tagStartIndex, sampleEnd));
 
-                if (data.error) {
-                    console.error("Streaming error:", data.error);
+                        // Try to match the full opening tag
+                        const match = state.rawStream.match(/<canvas-content\s+type=["']([^"']+)["']\s+title=["']([^"']+)["']>/);
+
+                        if (match) {
+                            console.log('[CANVAS DEBUG] Regex matched! Type:', match[1], 'Title:', match[2]);
+                            state.isOpen = true;
+                            state.type = match[1];
+                            state.title = match[2];
+                            state.buffer = '';
+
+                            const tagEndIndex = state.rawStream.indexOf('>', state.rawStream.lastIndexOf('<canvas-content'));
+                            if (tagEndIndex !== -1 && tagEndIndex < state.rawStream.length - 1) {
+                                state.buffer = state.rawStream.substring(tagEndIndex + 1);
+                                console.log('[CANVAS DEBUG] Initial buffer:', state.buffer.substring(0, 50));
+                            }
+
+                            console.log('[CANVAS DEBUG] Checking PanelInteractionVars.setShowCanvas:', typeof PanelInteractionVars.setShowCanvas);
+                            console.log('[CANVAS DEBUG] Checking PanelInteractionVars.triggerCanvas:', typeof PanelInteractionVars.triggerCanvas);
+
+                            if (PanelInteractionVars.setShowCanvas) {
+                                console.log('[CANVAS DEBUG] Auto-open disabled by user request');
+                                // console.log('[CANVAS DEBUG] Calling setShowCanvas(true)');
+                                // setTimeout(() => PanelInteractionVars.setShowCanvas(true), 0);
+                            } else {
+                                console.error('[CANVAS DEBUG] setShowCanvas is NOT available!');
+                            }
+
+                            // START OF TAG DETECTED
+                            // specific tag logic can go here if needed
+                        } else {
+                            console.log('[CANVAS DEBUG] Regex did NOT match yet, tag still assembling...');
+                        }
+                    }
+
+                    // 3. Update Chat UI with the (potentially modified) content
+                    // UNIFIED FIX: We DO NOT inject placeholders anymore. 
+                    // We let the raw <canvas-content> tag flow into the message so it persists in history.
+                    // The Renderer will handle hiding it and showing the card.
+                    streamingMessageRef.current = state.rawStream;
+
+                    setcontext(prev => {
+                        const newContext = [...prev];
+                        if (newContext.length > 0) {
+                            newContext[newContext.length - 1].content = streamingMessageRef.current;
+                        }
+                        return newContext;
+                    });
+
+                    if (shouldAutoScrollRef.current) {
+                        scrollToBottom();
+                    }
+
+                } else if (data.type === 'phase') {
+                    setDeepMindPhase(data.phase);
+                } else if (data.type === 'done') {
                     eventSourceRef.current.close();
                     setIsStreaming(false);
-                    return;
+                } else if (data.type === 'error') {
+                    console.error("Stream Error:", data.error);
+                    eventSourceRef.current.close();
+                    setIsStreaming(false);
+                    setcontext(prev => {
+                        const updated = [...prev];
+                        if (updated.length > 0) updated[updated.length - 1].content += `\n\n[Error: ${data.error}]`;
+                        return updated;
+                    });
                 }
 
                 // Handle Search Events
@@ -870,6 +980,18 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     const newContent = data.content || (data.type === 'content' ? data.content : "");
                     streamingMessageRef.current += newContent;
 
+                    // Auto-Open Canvas Logic
+                    const allMatches = [...streamingMessageRef.current.matchAll(/<canvas-content[^>]*type="([^"]+)"[^>]*title="([^"]+)"[^>]*>([\s\S]*?)(?:<\/canvas-content>|$)/g)];
+                    if (allMatches.length > 0) {
+                        const last = allMatches[allMatches.length - 1];
+                        const type = last[1];
+                        const title = last[2];
+                        const content = last[3];
+                        if (PanelInteractionVars?.triggerCanvas) {
+                            PanelInteractionVars.triggerCanvas(type, content, title, [], true);
+                        }
+                    }
+
                     // Update the last message with streamed content in real-time
                     setcontext(prev => {
                         const updated = [...prev];
@@ -891,9 +1013,35 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             };
 
             eventSourceRef.current.onerror = (error) => {
-                console.error("EventSource error:", error);
+                console.error("=== EVENTSOURCE ERROR ===");
+                console.error("Error object:", error);
+                console.error("EventSource readyState:", eventSourceRef.current?.readyState);
+                console.error("EventSource URL:", eventSourceRef.current?.url);
+                console.error("=========================");
+
+                // ReadyState values: 0 = CONNECTING, 1 = OPEN, 2 = CLOSED
+                if (eventSourceRef.current?.readyState === 2) {
+                    console.error("Connection was closed by server or failed to connect");
+                }
+
                 eventSourceRef.current.close();
                 setIsStreaming(false);
+
+                // Show user-friendly error ONLY if we haven't received valid content or done signal
+                setcontext(prev => {
+                    const updated = [...prev];
+                    if (updated.length > 0 && updated[updated.length - 1].role === 'assistant') {
+                        // If we have substantial content, assume it was a clean close that looked dirty
+                        const currentContent = updated[updated.length - 1].content || '';
+                        const hasArtifact = currentContent.includes('[[CANVAS_ARTIFACT');
+
+                        if (!hasArtifact && currentContent.length < 50) {
+                            updated[updated.length - 1].content += '\n\n**[Stream Error: Connection lost. Please try again.]**';
+                        }
+                        updated[updated.length - 1].streaming = false;
+                    }
+                    return updated;
+                });
             };
 
         } catch (error) {
@@ -997,7 +1145,8 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                 exit={{ opacity: 0, scale: 0.9, y: 10 }}
                                 className="absolute right-0 top-full mt-2 w-48 bg-secondary border border-border rounded-xl shadow-2xl overflow-hidden z-[100]"
                             >
-                                <button
+                                {/* Side-by-Side Button Hidden (Experimental) */}
+                                {/* <button
                                     onClick={() => {
                                         PanelInteractionVars.setIsSideBySideMode(!PanelInteractionVars.isSideBySideMode);
                                         // Auto-close sidebar
@@ -1010,7 +1159,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                 >
                                     <Columns size={16} className="text-purple-400" />
                                     <span>{PanelInteractionVars.isSideBySideMode ? 'Standard Chat' : 'Side-by-Side'}</span>
-                                </button>
+                                </button> */}
                                 <button
                                     onClick={(e) => {
                                         e.preventDefault();
@@ -1248,15 +1397,113 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                                         )}
                                                     </div>
                                                 )}
-                                                {node.role?.toLowerCase() === "user" ? (
-                                                    <p className="text-text whitespace-pre-wrap">{node.content}</p>
-                                                ) : (
-                                                    <MarkdownRenderer
-                                                        content={node.content}
-                                                        streaming={node.streaming}
-                                                        sources={node.searchSources}
-                                                    />
-                                                )}
+                                                {/* UNIFIED RENDERER: Detect <canvas-content> tags (Stream & History) */}
+                                                {(() => {
+                                                    // Regex to match <canvas-content> blocks (including partials at end for formatting)
+                                                    // Captures: 1=Attributes, 2=Content
+                                                    const canvasRegex = /<canvas-content([^>]*)>([\s\S]*?)(?:<\/canvas-content>|$)/g;
+
+                                                    // If no match, normal render
+                                                    if (!node.content.match(canvasRegex)) {
+                                                        return <MarkdownRenderer content={node.content} streaming={node.streaming} sources={node.searchSources} />;
+                                                    }
+
+                                                    // Split and Render
+                                                    const parts = [];
+                                                    let lastIndex = 0;
+                                                    let match;
+
+                                                    while ((match = canvasRegex.exec(node.content)) !== null) {
+                                                        // Text before tag
+                                                        if (match.index > lastIndex) {
+                                                            parts.push(
+                                                                <MarkdownRenderer
+                                                                    key={`text-${lastIndex}`}
+                                                                    content={node.content.substring(lastIndex, match.index)}
+                                                                    streaming={node.streaming}
+                                                                    sources={node.searchSources}
+                                                                />
+                                                            );
+                                                        }
+
+                                                        // The Canvas Block
+                                                        const attributes = match[1];
+                                                        const innerContent = match[2];
+
+                                                        // Extract Type and Title
+                                                        const typeMatch = attributes.match(/type="([^"]+)"/);
+                                                        const titleMatch = attributes.match(/title="([^"]+)"/);
+                                                        const type = typeMatch ? typeMatch[1] : 'code';
+                                                        const title = titleMatch ? titleMatch[1] : 'Artifact';
+
+                                                        const handleOpenCanvas = () => {
+                                                            const versions = [];
+                                                            context.forEach(msg => {
+                                                                const r = new RegExp('<canvas-content([^>]*)>([\\s\\S]*?)(?:<\\/canvas-content>|$)', 'g');
+                                                                let m;
+                                                                while ((m = r.exec(msg.content)) !== null) {
+                                                                    const tMatch = m[1].match(/title="([^"]+)"/);
+                                                                    const t = tMatch ? tMatch[1] : 'Artifact';
+                                                                    if (t === title && m[2].trim()) {
+                                                                        versions.push({ title: t, content: m[2] });
+                                                                    }
+                                                                }
+                                                            });
+                                                            PanelInteractionVars.triggerCanvas(type, innerContent, title, versions, false);
+                                                        };
+
+                                                        parts.push(
+                                                            <div key={`canvas-${match.index}`} className="w-full max-w-md my-2">
+                                                                <div className="bg-[#0f0f0f] border border-[#222] rounded-xl overflow-hidden hover:border-[#333] transition-all group shadow-lg">
+                                                                    {/* Header */}
+                                                                    <div className="px-4 py-2 bg-[#161616] border-b border-[#222] flex items-center justify-between">
+                                                                        <span className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">CANVAS MODEL</span>
+                                                                        <div className="flex gap-1.5">
+                                                                            <div className="w-2 h-2 rounded-full bg-red-500/20"></div>
+                                                                            <div className="w-2 h-2 rounded-full bg-yellow-500/20"></div>
+                                                                            <div className="w-2 h-2 rounded-full bg-green-500/20"></div>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Body */}
+                                                                    <div className="p-4 flex items-center gap-4">
+                                                                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 
+                                                                            ${type === 'mermaid' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                                                                            {type === 'mermaid' ? <Activity size={24} /> : <Code size={24} />}
+                                                                        </div>
+
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <h4 className="text-zinc-200 font-medium text-sm truncate" title={title}>{title}</h4>
+                                                                            <p className="text-zinc-500 text-xs uppercase tracking-wider mt-0.5">{type}</p>
+                                                                            <button
+                                                                                onClick={handleOpenCanvas} className="px-4 py-2 bg-white text-black text-xs font-bold rounded hover:bg-zinc-200 transition-colors flex items-center gap-2 shrink-0 opacity-90 hover:opacity-100"
+                                                                            >
+                                                                                OPEN
+                                                                                <Maximize2 size={12} />
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+
+                                                        lastIndex = canvasRegex.lastIndex;
+                                                    }
+
+                                                    // Text after last tag
+                                                    if (lastIndex < node.content.length) {
+                                                        parts.push(
+                                                            <MarkdownRenderer
+                                                                key={`text-end`}
+                                                                content={node.content.substring(lastIndex)}
+                                                                streaming={node.streaming}
+                                                                sources={node.searchSources}
+                                                            />
+                                                        );
+                                                    }
+
+                                                    return <div className="flex flex-col gap-2">{parts}</div>;
+                                                })()}
 
                                                 {/* Response Actions (Like, Dislike, Copy) for Assistant ONLY */}
                                                 {node.role === 'assistant' && !node.streaming && (
@@ -1292,7 +1539,8 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                                                     </div>
                                                 )}
                                             </motion.div>
-                                        )}
+                                        )
+                                        }
                                     </motion.div>
                                 )}
                             </div>
@@ -1302,12 +1550,13 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
 
 
                 </motion.div>
-            )}
+            )
+            }
 
 
 
             {/* Input Area */}
-            <motion.div
+            < motion.div
                 layout
                 className="w-full flex justify-center items-center pb-6 pt-2 shrink-0 z-10"
             >

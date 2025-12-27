@@ -105,6 +105,16 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
         { id: 'kimi-k2', name: 'KIMI K2', Icon: Moon }
     ]
 
+    const textareaRef = useRef(null)
+
+    // Auto-resize textarea
+    useEffect(() => {
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto'; // Reset height
+            textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`; // Set new height, max 120px (approx 5 rows)
+        }
+    }, [promptInput]);
+
     // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -132,12 +142,15 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
     }
 
     const handleKeyDown = (e) => {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !e.shiftKey) { // Allow Shift+Enter for new line
+            e.preventDefault();
             triggerSend();
         }
     }
 
     const triggerSend = () => {
+        if (!promptInput.trim() && !attachment) return;
+
         if (setIsChatStarted) {
             setIsChatStarted(true);
         }
@@ -146,6 +159,7 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
         } else if (setIsSendPrompt) {
             setIsSendPrompt(true);
         }
+        // Height will auto-reset via useEffect when promptInput clears
     }
 
     const handleModelSelect = (modelId) => {
@@ -219,13 +233,14 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                 )}
             </AnimatePresence>
 
-            <input
-                type="text"
+            <textarea
+                ref={textareaRef}
                 value={promptInput}
                 onChange={handlepromptInput}
                 onKeyDown={handleKeyDown}
-                className="h-14 text-text placeholder:text-textLight outline-none px-4 bg-transparent"
+                className="w-full min-h-[56px] max-h-[120px] py-4 text-text placeholder:text-textLight outline-none px-4 bg-transparent resize-none overflow-y-auto custom-scrollbar"
                 placeholder={attachment ? "Type a message to send with your file..." : "Ask Anything"}
+                rows={1}
             />
             <div className="w-full bg-primary flex p-1 justify-between rounded-2xl border-2 border-borderLight">
                 <div className="flex gap-1">
