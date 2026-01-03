@@ -87,7 +87,7 @@ function LandingPage() {
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
                             </span>
-                            v3.0.2 Now Available with Side-by-Side Mode & Decommissioned Models Fixed
+                            v3.1.0 Now Available: Chat Performance Update & Sticky Scroll
                         </motion.div>
                     </Link>
 
@@ -144,10 +144,10 @@ function LandingPage() {
 
                     <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {[
-                            { name: "GPT-OSS 120B", role: "General Purpose", desc: "Balanced performance for everyday tasks and coding." },
-                            { name: "QWEN 3 32B", role: "Reasoning", desc: "Exceptional logic and math capabilities." },
-                            { name: "LLAMA 3.3 70B", role: "Creative", desc: "Nuanced writing and creative generation." },
-                            { name: "KIMI K2", role: "Speed", desc: "Ultra-fast responses for quick queries." }
+                            { name: "Queue Generative", role: "General Purpose", desc: "Balanced performance for everyday tasks and coding." },
+                            { name: "Queue Analytical", role: "Reasoning", desc: "Exceptional logic and math capabilities." },
+                            { name: "Queue Creative", role: "Creative", desc: "Nuanced writing and creative generation." },
+                            { name: "Queue Instant", role: "Speed", desc: "Ultra-fast responses for quick queries." }
                         ].map((model, i) => (
                             <div key={i} className="bg-zinc-900 border border-white/10 rounded-2xl p-6 hover:bg-white/5 transition-colors">
                                 <div className="text-xs font-mono text-indigo-400 mb-2 uppercase tracking-wider">{model.role}</div>
@@ -162,7 +162,7 @@ function LandingPage() {
             {/* STACKED SECTIONS CONTAINER */}
             <div className="relative">
                 {/* SECTION: AI Personas */}
-                <section className="sticky top-0 min-h-screen py-24 px-6 relative overflow-hidden bg-[#0A0A0A] z-10 flex items-center border-t border-white/5">
+                <section className="sticky top-0 min-h-screen py-24 px-6 relative overflow-hidden bg-[#0A0A0A] z-10 flex items-center border-t border-white/10 rounded-t-[40px] shadow-[0_-20px_50px_rgba(0,0,0,0.7)]">
                     {/* Background Glow */}
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-white/5 blur-[100px] rounded-full pointer-events-none" />
 
@@ -173,11 +173,11 @@ function LandingPage() {
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-2 w-2 bg-pink-400"></span>
                                 </span>
-                                New in v3.0.1
+                                Queue Intelligence
                             </div>
-                            <h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">AI Personas</h2>
+                            <h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">AI Assistants</h2>
                             <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
-                                Chat with specialized AI personalities. Each persona has unique expertise and maintains its own conversation history.
+                                Chat with specialized AI personalities. Each assistant has unique expertise and maintains its own conversation history.
                             </p>
                         </div>
 
@@ -198,13 +198,13 @@ function LandingPage() {
                         </div>
 
                         <div className="mt-12 text-center">
-                            <p className="text-zinc-500 text-sm">20+ personas across Scientists, Philosophers, Business Leaders, Writers & more</p>
+                            <p className="text-zinc-500 text-sm">20+ assistants across Scientists, Philosophers, Business Leaders, Writers & more</p>
                         </div>
                     </div>
                 </section>
 
                 {/* SECTION 3: Persistent Workspace */}
-                <section className="sticky top-0 min-h-screen py-24 px-6 relative bg-[#0C0C0C] z-20 flex items-center border-t border-white/10 shadow-[0_-20px_40px_rgba(0,0,0,0.5)]">
+                <section className="sticky top-0 min-h-screen py-24 px-6 relative bg-[#0C0C0C] z-20 flex items-center border-t border-white/10 rounded-t-[40px] shadow-[0_-20px_50px_rgba(0,0,0,0.7)]">
                     <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-16 items-center w-full">
                         <div>
                             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-medium mb-6">
@@ -255,7 +255,7 @@ function LandingPage() {
                 </section>
 
                 {/* SECTION 4: Vision & Voice */}
-                <section className="sticky top-0 min-h-screen py-24 px-6 bg-[#0E0E0E] z-30 flex items-center border-t border-white/10 shadow-[0_-20px_40px_rgba(0,0,0,0.5)]">
+                <section className="sticky top-0 min-h-screen py-24 px-6 bg-[#0E0E0E] z-30 flex items-center border-t border-white/10 rounded-t-[40px] shadow-[0_-20px_50px_rgba(0,0,0,0.7)]">
                     <div className="max-w-6xl mx-auto w-full">
                         <div className="text-center mb-16">
                             <h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">See. Speak. Create.</h2>
@@ -340,7 +340,7 @@ function LandingPage() {
                         <p className="text-zinc-500">Access the world's most capable intelligence engines in one unified interface.</p>
                     </div>
                     <div className="flex flex-wrap justify-center gap-4 md:gap-8 opacity-70">
-                        {['GPT-OSS 120B', 'QWEN 3 32B', 'LLAMA 3.3 70B', 'KIMI K2'].map((model) => (
+                        {['Queue Generative', 'Queue Analytical', 'Queue Creative', 'Queue Instant'].map((model) => (
                             <div key={model} className="px-6 py-3 rounded-full bg-white/5 border border-white/5 text-zinc-300 font-mono text-sm">
                                 {model}
                             </div>

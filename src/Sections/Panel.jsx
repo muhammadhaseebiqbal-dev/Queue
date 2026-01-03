@@ -1,12 +1,11 @@
 import { motion, AnimatePresence } from "framer-motion"
-import { Plus, FolderOpen, MessageSquare, Plug, ChevronRight, Trash2, Clock, Users, ChevronDown } from "lucide-react"
+import { Plus, FolderOpen, MessageSquare, Plug, ChevronRight, Trash2, Clock, Users, ChevronDown, Search, LayoutGrid, X } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import axios from 'axios'
 import { API_URL } from '../config'
 import ConfirmModal from '../components/ui/ConfirmModal'
 
 function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars }) {
-    const [activeSection, setActiveSection] = useState('chats')
     const [projects, setProjects] = useState([])
     const [chats, setChats] = useState([]) // Sessions
     const [connectors, setConnectors] = useState([
@@ -211,12 +210,22 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
         }
     };
 
-    // Animation variants for tab content
-    const tabVariants = {
-        hidden: { opacity: 0, x: -20 },
-        visible: { opacity: 1, x: 0, transition: { duration: 0.2 } },
-        exit: { opacity: 0, x: 20, transition: { duration: 0.2 } }
-    };
+    // --- Search State ---
+    const [showSearchModal, setShowSearchModal] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [showAppsModal, setShowAppsModal] = useState(false);
+
+    // --- Filtered Chats for Search ---
+    const searchResults = chats.filter(chat =>
+        chat.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    // Hoist chats to parent for SearchModal
+    useEffect(() => {
+        if (PanelInteractionVars.setAvailableChats) {
+            PanelInteractionVars.setAvailableChats(chats);
+        }
+    }, [chats, PanelInteractionVars.setAvailableChats]);
 
     return (
         <>
@@ -235,24 +244,21 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
 
             <motion.div
                 className={`bg-secondary border-r-2 border-border h-screen overflow-hidden flex flex-col flex-shrink-0 
-                fixed md:relative left-0 top-0 z-[100] md:z-auto shadow-2xl md:shadow-none`}
+                fixed md:relative left-0 top-0 z-[100] md:z-auto shadow-2xl md:shadow-none font-sans`}
                 initial={false}
                 animate={{
                     width: isPanelExpanded ? (window.innerWidth < 768 ? '85%' : '280px') : '0px',
-                    x: isPanelExpanded ? 0 : (window.innerWidth < 768 ? -20 : 0), // Slide out on mobile
-                    opacity: isPanelExpanded ? 1 : (window.innerWidth < 768 ? 0 : 0)
+                    x: isPanelExpanded ? 0 : (window.innerWidth < 768 ? -20 : 0),
+                    opacity: isPanelExpanded ? 1 : 0
                 }}
-                transition={{
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 30,
-                    mass: 0.8
-                }}
+                transition={{ type: "spring", stiffness: 300, damping: 30, mass: 0.8 }}
             >
-                <div className="w-full h-full flex flex-col">
-                    {/* Header */}
-                    <div className="p-4 bg-secondary flex justify-between items-center">
-                        <img src="/logo.svg" alt="QueueAI" className="h-8 w-auto" />
+                <div className="w-full h-full flex flex-col relative">
+
+                    {/* Header: Logo & Collapse */}
+                    <div className="p-4 flex justify-between items-center shrink-0">
+                        {/* Optional Logo or just spacing */}
+                        <div className="w-8 h-8 md:hidden"></div>
                         <button
                             onClick={() => setIsPanelExpanded(false)}
                             className="md:hidden p-2 text-textLight hover:text-text"
@@ -261,200 +267,176 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                         </button>
                     </div>
 
-                    <div className="px-4 pb-4 bg-secondary">
+                    {/* Primary Actions (New Chat, Search, Apps) */}
+                    <div className="px-3 pb-2 space-y-1 shrink-0">
+                        {/* New Chat */}
                         <button
-                            onClick={handleNewChat}
-                            className="w-full bg-tertiary hover:bg-primary transition-colors border-2 border-border rounded-xl p-3 flex items-center gap-2 text-text"
+                            onClick={() => {
+                                handleNewChat();
+                                PanelInteractionVars.setViewMode?.('chat');
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-tertiary rounded-lg flex items-center gap-3 transition-colors group"
                         >
-                            <Plus size={18} />
-                            <span className="text-sm font-medium">New Chat</span>
+                            <div className="p-1 bg-white text-black rounded-lg group-hover:bg-white/90 transition-colors">
+                                <Plus size={16} />
+                            </div>
+                            <span className="text-sm font-medium text-text">New chat</span>
+                        </button>
+
+                        {/* Search Chats (Triggers Central Modal) */}
+                        <button
+                            onClick={() => {
+                                PanelInteractionVars.setShowSearchModal?.(true);
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-tertiary rounded-lg flex items-center gap-3 transition-colors text-textLight hover:text-text"
+                        >
+                            <Search size={18} />
+                            <span className="text-sm">Search chats</span>
+                        </button>
+
+                        {/* Apps / Connectors */}
+                        <button
+                            onClick={() => setShowAppsModal(true)}
+                            className="w-full text-left px-3 py-2 hover:bg-tertiary rounded-lg flex items-center gap-3 transition-colors text-textLight hover:text-text"
+                        >
+                            <LayoutGrid size={18} />
+                            <span className="text-sm">Apps</span>
                         </button>
                     </div>
 
-                    {/* Navigation Tabs */}
-                    <div className="flex border-b-2 border-border p-0 gap-0 mx-0 mt-0 rounded-none bg-secondary">
-                        {['chats', 'projects', 'personas', 'connectors'].map((tab) => (
+                    {/* Scrollable Vertical Content */}
+                    <div className="flex-1 overflow-y-auto scrollbar-hide px-3 py-2 space-y-6">
+
+                        {/* GPTs / Personas Section */}
+                        <div className="space-y-1">
+                            <div className="flex items-center justify-between px-2 mb-2">
+                                <h3 className="text-xs font-medium text-textLight/70 uppercase tracking-wider">Assistants</h3>
+                            </div>
+
+                            <PersonasView
+                                personaChats={chats}
+                                onSelect={(persona) => {
+                                    if (persona.id === 'sajid') {
+                                        setPendingSajidPersona(persona);
+                                        setShowSajidModal(true);
+                                    } else {
+                                        handlePersonaActivation(persona);
+                                        PanelInteractionVars.setViewMode?.('chat');
+                                    }
+                                }}
+                                isCompact={true}
+                                limit={3} // Limit to top 3
+                            />
+
+                            {/* Explore GPTs Button */}
                             <button
-                                key={tab}
-                                onClick={() => setActiveSection(tab)}
-                                className={`flex-1 py-3 text-sm font-medium transition-colors rounded-none capitalize ${activeSection === tab
-                                    ? 'text-text border-b-2 border-text bg-tertiary'
-                                    : 'text-textLight hover:text-text hover:bg-tertiary'
-                                    }`}
+                                onClick={() => PanelInteractionVars.setViewMode?.('explore')}
+                                className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-tertiary transition-colors text-left group relative w-full mt-0.5"
                             >
-                                {tab === 'connectors' ? 'Apps' : tab}
+                                <div className="w-5 h-5 rounded-full bg-secondary shadow-inner flex items-center justify-center text-sm ring-1 ring-border/20 text-textLight group-hover:text-text transition-colors">
+                                    <LayoutGrid size={12} />
+                                </div>
+                                <div className="flex-1 overflow-hidden">
+                                    <h4 className="text-xs font-medium text-textLight group-hover:text-text truncate transition-colors">Explore more</h4>
+                                </div>
                             </button>
-                        ))}
-                    </div>
+                        </div>
 
-                    {/* Content Area */}
-                    <div className="flex-1 overflow-y-auto scrollbar-hide p-0 relative">
-                        <AnimatePresence mode="wait">
-                            {activeSection === 'personas' && (
-                                <motion.div
-                                    key="personas"
-                                    initial="hidden"
-                                    animate="visible"
-                                    exit="exit"
-                                    variants={tabVariants}
-                                    className="p-2 space-y-2 absolute w-full"
-                                >
-                                    <PersonasView
-                                        personaChats={chats.filter(chat => chat.personaId)}
-                                        onSelect={async (persona) => {
-                                            if (persona.id === 'sajid') {
-                                                setPendingSajidPersona(persona);
-                                                setShowSajidModal(true);
-                                                return;
-                                            }
-                                            handlePersonaActivation(persona);
-                                        }} />
-                                </motion.div>
-                            )}
+                        {/* Projects Section */}
+                        <div className="space-y-1">
+                            <div className="flex justify-between items-center px-2 mb-1 group">
+                                <h3 className="text-xs font-medium text-textLight/70 uppercase tracking-wider">Projects</h3>
+                                <button onClick={() => setShowProjectModal(true)} className="text-textLight hover:text-text opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Plus size={14} />
+                                </button>
+                            </div>
 
-                            {activeSection === 'chats' && (
-                                <motion.div
-                                    key="chats"
-                                    initial="hidden"
-                                    animate="visible"
-                                    exit="exit"
-                                    variants={tabVariants}
-                                    className="absolute w-full h-full"
+                            {projects.map((project) => (
+                                <button
+                                    key={project._id}
+                                    onClick={async () => {
+                                        PanelInteractionVars.setActiveProject(project);
+                                        try {
+                                            const response = await axios.get(`${API_URL}/api/project/${project._id}/sessions`);
+                                            const sessions = response.data.sessions;
+                                            PanelInteractionVars.setActiveSessionId(sessions && sessions.length > 0 ? sessions[0]._id : null);
+                                            PanelInteractionVars.setViewMode?.('chat');
+                                        } catch (error) {
+                                            console.error("Error fetching project sessions:", error);
+                                            PanelInteractionVars.setActiveSessionId(null);
+                                        }
+                                    }}
+                                    className={`w-full text-left px-2 py-1.5 rounded-lg flex items-center gap-2 transition-colors group relative ${PanelInteractionVars?.activeProject?._id === project._id ? 'bg-tertiary text-text' : 'text-textLight hover:bg-tertiary hover:text-text'}`}
                                 >
-                                    {isLoading ? (
-                                        // Skeleton Loader for Chat History
-                                        <div className="space-y-4 px-2 py-3">
-                                            {[1, 2, 3, 4, 5].map((i) => (
-                                                <div key={i} className="flex gap-3 animate-pulse">
-                                                    <div className="w-4 h-4 rounded-full bg-white/10 shrink-0 mt-1"></div>
-                                                    <div className="flex-1 space-y-2">
-                                                        <div className="w-3/4 h-3 rounded bg-white/10"></div>
-                                                        <div className="w-1/2 h-2 rounded bg-white/5"></div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <ChatHistoryList
-                                            chats={chats}
-                                            PanelInteractionVars={PanelInteractionVars}
-                                            handleDeleteChat={handleDeleteChat}
-                                        />
-                                    )}
-                                </motion.div>
-                            )}
-
-                            {activeSection === 'projects' && (
-                                <motion.div
-                                    key="projects"
-                                    initial="hidden"
-                                    animate="visible"
-                                    exit="exit"
-                                    variants={tabVariants}
-                                    className="p-2 space-y-2 absolute w-full"
-                                >
-                                    <div className="p-4 text-center border-2 border-dashed border-border rounded-xl m-2">
-                                        <FolderOpen size={32} className="text-textLight mx-auto mb-3" />
-                                        <p className="text-sm text-textLight mb-3">Group your research</p>
-                                        <button
-                                            onClick={() => setShowProjectModal(true)}
-                                            className="bg-tertiary hover:bg-primary transition-colors border-2 border-border rounded-lg px-4 py-2 text-sm text-text font-medium"
-                                        >
-                                            + Create Project
-                                        </button>
+                                    <div
+                                        className="w-5 h-5 rounded-full flex items-center justify-center text-xs shadow-inner ring-1 ring-border/20"
+                                        style={{ backgroundColor: project.color + '20', color: project.color }}
+                                    >
+                                        {project.emoji || '📁'}
                                     </div>
-                                    {projects.map((project) => (
-                                        <button
-                                            key={project._id}
-                                            onClick={async () => {
-                                                PanelInteractionVars.setActiveProject(project);
+                                    <span className="text-xs font-medium truncate flex-1">{project.name}</span>
+                                </button>
+                            ))}
+                        </div>
 
-                                                // Fetch sessions for this project to find the latest one
-                                                try {
-                                                    const response = await axios.get(`${API_URL}/api/project/${project._id}/sessions`);
-                                                    const sessions = response.data.sessions;
-
-                                                    if (sessions && sessions.length > 0) {
-                                                        // Continuous Chat: Load the most recent session
-
-                                                        PanelInteractionVars.setActiveSessionId(sessions[0]._id);
-                                                    } else {
-                                                        // No session exists, start clean (will create one on first message)
-
-                                                        PanelInteractionVars.setActiveSessionId(null);
-                                                    }
-                                                } catch (error) {
-                                                    console.error("Error fetching project sessions:", error);
-                                                    PanelInteractionVars.setActiveSessionId(null);
-                                                }
-                                            }}
-                                            className={`w-full p-3 rounded-xl transition-colors flex items-center justify-between group ${PanelInteractionVars?.activeProject?._id === project._id
-                                                ? 'bg-[#1a1a1a]'
-                                                : 'hover:bg-tertiary'
-                                                }`}
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <span
-                                                    className="text-xl"
-                                                    style={{ filter: `drop-shadow(0 0 8px ${project.color}40)` }}
-                                                >
-                                                    {project.emoji || '📁'}
-                                                </span>
-                                                <span className="text-sm text-text font-medium">{project.name}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs text-textLight bg-primary px-2 py-0.5 rounded-full border border-border">{project.chats || 0}</span>
-                                                <button
-                                                    onClick={(e) => handleDeleteProject(project._id, e)}
-                                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-red-500/20 rounded"
-                                                >
-                                                    <Trash2 size={14} className="text-textLight hover:text-red-400" />
-                                                </button>
-                                            </div>
-                                        </button>
-                                    ))}
-                                </motion.div>
+                        {/* Chat History Section */}
+                        <div className="space-y-1">
+                            <h3 className="px-2 text-xs font-medium text-textLight/70 uppercase tracking-wider mb-2">Your chats</h3>
+                            {isLoading ? (
+                                <div className="space-y-2 px-2">
+                                    {[1, 2, 3].map(i => <div key={i} className="h-4 bg-white/5 rounded animate-pulse" />)}
+                                </div>
+                            ) : (
+                                <ChatHistoryList
+                                    chats={chats}
+                                    PanelInteractionVars={PanelInteractionVars}
+                                    handleDeleteChat={handleDeleteChat}
+                                    onSelect={() => PanelInteractionVars.setViewMode?.('chat')}
+                                />
                             )}
-
-                            {activeSection === 'connectors' && (
-                                <motion.div
-                                    key="connectors"
-                                    initial="hidden"
-                                    animate="visible"
-                                    exit="exit"
-                                    variants={tabVariants}
-                                    className="p-2 space-y-2 absolute w-full"
-                                >
-                                    {connectors.map((connector) => (
-                                        <div
-                                            key={connector.id}
-                                            className="p-3 rounded-xl bg-tertiary border-2 border-border flex items-center justify-between"
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <Plug size={16} className="text-textLight" />
-                                                <span className="text-sm text-text font-medium">{connector.name}</span>
-                                            </div>
-                                            <div className={`text-xs px-2 py-1 rounded border border-border ${connector.status === 'connected' ? 'bg-green-500/20 text-green-400' : 'bg-primary text-textLight'}`}>
-                                                {connector.status === 'connected' ? 'Connected' : 'Disconnected'}
-                                            </div>
-                                        </div>
-                                    ))}
-                                    <button className="w-full py-2.5 text-xs font-medium text-textLight hover:text-text border-2 border-dashed border-border rounded-xl hover:bg-tertiary transition-colors">
-                                        + Add Connector
-                                    </button>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                        </div>
                     </div>
 
-                    {/* Footer */}
-                    <div className="p-4 border-t-2 border-border bg-secondary">
-                        <div className="flex items-center gap-2 text-textLight text-xs">
-                            <Clock size={12} />
-                            <span>Synced</span>
+                    {/* Footer - Profile / Settings */}
+                    <div className="p-3 mt-auto border-t border-border/50 shrink-0">
+                        {/* Placeholder for User Profile if needed, or just keep it simple */}
+                        <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-tertiary cursor-pointer transition-colors">
+                            <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                                {PanelInteractionVars.userId?.substring(0, 2).toUpperCase() || 'US'}
+                            </div>
+                            <div className="flex-1 overflow-hidden">
+                                <p className="text-sm font-medium text-text truncate">User</p>
+                                <p className="text-xs text-textLight truncate">Free Plan</p>
+                            </div>
                         </div>
                     </div>
                 </div>
+
+                {/* --- MODALS --- */}
+
+                {/* Apps Modal */}
+                <AnimatePresence>
+                    {showAppsModal && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                            onClick={() => setShowAppsModal(false)}
+                            className="absolute left-full top-0 ml-2 z-50 w-72 bg-secondary border border-border rounded-xl shadow-2xl p-4"
+                            style={{ top: '160px' }} // Position next to the button approx
+                        >
+                            <h3 className="text-sm font-bold text-text mb-3">Integrations</h3>
+                            {connectors.map((connector) => (
+                                <div key={connector.id} className="p-2 mb-2 rounded-lg bg-tertiary flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Plug size={14} className="text-textLight" />
+                                        <span className="text-sm text-text">{connector.name}</span>
+                                    </div>
+                                    <div className={`w-2 h-2 rounded-full ${connector.status === 'connected' ? 'bg-green-500' : 'bg-red-500'}`} />
+                                </div>
+                            ))}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
 
                 {/* Project Creation Modal */}
                 <AnimatePresence>
@@ -471,95 +453,101 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
                                 animate={{ scale: 1, opacity: 1 }}
                                 exit={{ scale: 0.9, opacity: 0 }}
                                 onClick={(e) => e.stopPropagation()}
-                                className="bg-secondary border-2 border-border rounded-2xl p-6 w-96 shadow-2xl"
+                                className="bg-secondary border border-border rounded-xl p-6 w-[500px] shadow-2xl relative overflow-hidden"
                             >
-                                <h3 className="text-lg font-bold text-text mb-4">Create New Project</h3>
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-lg font-bold text-text">Create Project</h3>
+                                    <button onClick={() => setShowProjectModal(false)} className="text-textLight hover:text-text">
+                                        <X size={18} />
+                                    </button>
+                                </div>
 
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="text-sm text-textLight mb-2 block">Project Name</label>
-                                        <input
-                                            type="text"
-                                            value={newProjectName}
-                                            onChange={(e) => setNewProjectName(e.target.value)}
-                                            onKeyDown={(e) => e.key === 'Enter' && handleCreateProject()}
-                                            placeholder="e.g., Research Papers"
-                                            className="w-full bg-primary border-2 border-border rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-text transition-colors"
-                                            autoFocus
-                                        />
-                                    </div>
-
-
-                                    <div>
-                                        <label className="text-sm text-textLight mb-2 block">Icon</label>
-                                        <div className="flex gap-2 flex-wrap">
-                                            {['📁', '📚', '💼', '🎯', '🔬', '💡', '🎨', '⚡', '🚀', '📊', '🔧', '🌟'].map(emoji => (
-                                                <button
-                                                    key={emoji}
-                                                    onClick={() => setNewProjectEmoji(emoji)}
-                                                    className={`w-10 h-10 rounded-lg transition-all text-2xl grayscale hover:grayscale-0 ${newProjectEmoji === emoji
-                                                        ? 'ring-2 ring-text ring-offset-2 ring-offset-secondary scale-110 grayscale-0'
-                                                        : ''
-                                                        }`}
-                                                    style={{
-                                                        backgroundColor: newProjectEmoji === emoji ? newProjectColor + '20' : 'transparent',
-                                                        filter: newProjectEmoji === emoji ? 'none' : 'grayscale(1)'
-                                                    }}
-                                                >
-                                                    {emoji}
-                                                </button>
-                                            ))}
+                                <div className="space-y-5">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="col-span-1">
+                                            <label className="text-xs font-semibold text-textLight uppercase tracking-wider mb-1.5 block">Name</label>
+                                            <input
+                                                type="text"
+                                                value={newProjectName}
+                                                onChange={(e) => setNewProjectName(e.target.value)}
+                                                onKeyDown={(e) => e.key === 'Enter' && handleCreateProject()}
+                                                placeholder="e.g., Q1 Marketing"
+                                                className="w-full bg-primary border border-border rounded-lg px-3 py-2.5 text-text text-sm focus:outline-none focus:border-text/50 transition-colors placeholder:text-textLight/30"
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <div className="col-span-1">
+                                            <label className="text-xs font-semibold text-textLight uppercase tracking-wider mb-1.5 block">Icon</label>
+                                            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-border">
+                                                {['📁', '🚀', '💡', '🔥', '✨', '💎'].map(emoji => (
+                                                    <button
+                                                        key={emoji}
+                                                        onClick={() => setNewProjectEmoji(emoji)}
+                                                        className={`w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center transition-all text-lg ${newProjectEmoji === emoji
+                                                                ? 'bg-text text-primary scale-110 shadow-lg'
+                                                                : 'bg-tertiary text-textLight hover:bg-tertiary/80 hover:text-text'
+                                                            }`}
+                                                    >
+                                                        {emoji}
+                                                    </button>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
 
                                     <div>
-                                        <label className="text-sm text-textLight mb-2 block">Description (Context)</label>
+                                        <label className="text-xs font-semibold text-textLight uppercase tracking-wider mb-1.5 block">Description</label>
                                         <textarea
                                             value={newProjectDescription}
                                             onChange={(e) => setNewProjectDescription(e.target.value)}
-                                            placeholder="This context will be added to all chats in this project..."
-                                            className="w-full bg-primary border-2 border-border rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-text transition-colors resize-none"
+                                            placeholder="What is this project about?"
+                                            className="w-full bg-primary border border-border rounded-lg px-3 py-2.5 text-text text-sm focus:outline-none focus:border-text/50 transition-colors resize-none placeholder:text-textLight/30"
                                             rows={2}
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="text-sm text-textLight mb-2 block">Upload Context Documents (PDF, DOCX, TXT)</label>
-                                        <div className="flex flex-col gap-2">
+                                        <label className="text-xs font-semibold text-textLight uppercase tracking-wider mb-1.5 block">
+                                            Context (PDF, DOCX)
+                                        </label>
+                                        <div className="relative group">
                                             <input
                                                 type="file"
                                                 multiple
                                                 accept=".pdf,.docx,.txt"
                                                 onChange={(e) => setSelectedFiles(Array.from(e.target.files))}
-                                                className="block w-full text-sm text-textLight
-                                                    file:mr-4 file:py-2 file:px-4
-                                                    file:rounded-full file:border-0
-                                                    file:text-xs file:font-semibold
-                                                    file:bg-tertiary file:text-text
-                                                    hover:file:bg-white/10"
+                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                             />
-                                            {selectedFiles.length > 0 && (
-                                                <div className="text-xs text-textLight">
-                                                    {selectedFiles.length} file(s) selected: {selectedFiles.map(f => f.name).join(', ')}
-                                                </div>
-                                            )}
+                                            <div className="bg-primary border border-dashed border-border group-hover:border-text/50 rounded-lg p-4 text-center transition-colors">
+                                                {selectedFiles.length > 0 ? (
+                                                    <div className="flex items-center justify-center gap-2 text-text text-sm">
+                                                        <FolderOpen size={16} className="text-blue-500" />
+                                                        <span>{selectedFiles.length} files selected</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col items-center gap-1 text-textLight group-hover:text-text transition-colors">
+                                                        <span className="text-sm font-medium">Click to upload files</span>
+                                                        <span className="text-[10px] opacity-60">PDF, DOCX, TXT supported</span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="flex gap-2 mt-6">
+                                <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-border/50">
                                     <button
                                         onClick={() => setShowProjectModal(false)}
-                                        className="flex-1 bg-primary hover:bg-tertiary border-2 border-border rounded-lg px-4 py-2 text-sm text-text font-medium transition-colors"
+                                        className="px-4 py-2 rounded-lg text-sm font-medium text-textLight hover:text-text transition-colors"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         onClick={handleCreateProject}
                                         disabled={!newProjectName.trim()}
-                                        className="flex-1 bg-text hover:bg-text/90 border-2 border-text rounded-lg px-4 py-2 text-sm text-primary font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="px-6 py-2 bg-text text-primary rounded-lg text-sm font-bold hover:bg-text/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-text/10"
                                     >
-                                        Create
+                                        Create Project
                                     </button>
                                 </div>
                             </motion.div>
@@ -647,13 +635,12 @@ function Panel({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars })
             </motion.div>
         </>
     )
-
 }
 
-export default Panel
+export default Panel;
 
 // Chat History List Component with Scroll-to-Bottom
-function ChatHistoryList({ chats, PanelInteractionVars, handleDeleteChat }) {
+function ChatHistoryList({ chats, PanelInteractionVars, handleDeleteChat, onSelect }) {
     const [showScrollButton, setShowScrollButton] = useState(false);
     const scrollContainerRef = useRef(null);
 
@@ -676,10 +663,11 @@ function ChatHistoryList({ chats, PanelInteractionVars, handleDeleteChat }) {
 
     return (
         <div className="relative h-full">
+            {/* Scrollable list */}
             <div
                 ref={scrollContainerRef}
                 onScroll={handleScroll}
-                className="space-y-1 px-2 pt-2 pb-2 h-full overflow-y-auto"
+                className="space-y-1 px-2 pt-2 pb-2 h-full overflow-y-auto scrollbar-hide"
             >
                 {filteredChats.length === 0 ? (
                     <p className="text-xs text-textLight text-center py-4">No chats yet</p>
@@ -691,16 +679,15 @@ function ChatHistoryList({ chats, PanelInteractionVars, handleDeleteChat }) {
                                 PanelInteractionVars.setActiveSessionId(chat.id);
                                 PanelInteractionVars.setActiveProject?.(null);
                                 PanelInteractionVars.setActivePersona?.(null);
+                                if (onSelect) onSelect();
                             }}
-                            className={`w-full p-3 rounded-xl transition-colors flex items-start gap-2 group cursor-pointer ${PanelInteractionVars?.activeSessionId === chat.id && !PanelInteractionVars?.activeProject
+                            className={`w-full p-2 rounded-lg transition-colors flex items-center gap-1 group cursor-pointer ${PanelInteractionVars?.activeSessionId === chat.id && !PanelInteractionVars?.activeProject
                                 ? 'bg-[#1a1a1a]'
                                 : 'hover:bg-tertiary'
                                 }`}
                         >
-                            <MessageSquare size={16} className="text-textLight mt-1 flex-shrink-0" />
                             <div className="flex-1 text-left overflow-hidden">
-                                <p className="text-sm text-text truncate font-medium">{chat.title}</p>
-                                <p className="text-xs text-textLight mt-1">{chat.timestamp}</p>
+                                <p className="text-sm text-text truncate font-normal">{chat.title}</p>
                             </div>
                             <button
                                 onClick={(e) => handleDeleteChat(chat.id, e)}
@@ -731,7 +718,7 @@ function ChatHistoryList({ chats, PanelInteractionVars, handleDeleteChat }) {
     );
 }
 
-function PersonasView({ onSelect, personaChats }) {
+function PersonasView({ onSelect, personaChats, isCompact, limit }) {
     const [personas, setPersonas] = useState([]);
     const [grouped, setGrouped] = useState({});
     const [loading, setLoading] = useState(true);
@@ -767,38 +754,73 @@ function PersonasView({ onSelect, personaChats }) {
         fetchPersonas();
     }, [personaChats]);
 
-    if (loading) return <div className="p-4 text-center text-textLight">Loading Personas...</div>;
+    if (loading) return <div className="p-4 text-center text-xs text-textLight">Loading...</div>;
+
+    // Flatten and limit if needed
+    let displayList = [];
+    if (limit) {
+        // If limiting, just show the top personas across all categories (or just flattening them)
+        // Prioritize 'featured' or just take the first N from the sorted groups
+        Object.values(grouped).forEach(list => displayList.push(...list));
+        displayList = displayList.slice(0, limit);
+    }
 
     return (
-        <div className="space-y-6 pb-4">
-            {Object.keys(grouped).map(category => (
-                <div key={category}>
-                    <h3 className="text-xs font-bold text-textLight uppercase tracking-wider mb-2 px-2">{category}</h3>
-                    <div className="grid grid-cols-1 gap-2">
-                        {grouped[category].map(persona => {
-                            const hasChat = personaChats?.some(chat => chat.personaId === persona.id);
-                            return (
-                                <button
-                                    key={persona.id}
-                                    onClick={() => onSelect(persona)}
-                                    className="flex items-center gap-3 p-3 rounded-xl bg-[#1a1a1a] hover:bg-tertiary transition-colors text-left group border border-white/5 relative"
-                                >
-                                    {/* Green indicator for active personas */}
-                                    {hasChat && (
-                                        <div className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-lg shadow-green-500/50"></div>
-                                    )}
-                                    <span className="text-2xl">{persona.emoji}</span>
-                                    <div className="flex-1 overflow-hidden">
-                                        <h4 className="text-sm font-medium text-text truncate">{persona.name}</h4>
-                                        <p className="text-xs text-textLight truncate">{persona.role}</p>
-                                    </div>
-                                    <ChevronRight size={14} className="text-textLight opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </button>
-                            );
-                        })}
-                    </div>
+        <div className={`space-y-4 ${isCompact ? 'space-y-1' : ''}`}>
+            {limit ? (
+                // Limited Flat View
+                <div className="grid grid-cols-1 gap-0.5">
+                    {displayList.map(persona => {
+                        const hasChat = personaChats?.some(chat => chat.personaId === persona.id);
+                        return (
+                            <button
+                                key={persona.id}
+                                onClick={() => onSelect(persona)}
+                                className={`flex items-center gap-2 p-1.5 rounded-lg hover:bg-tertiary transition-colors text-left group relative ${hasChat ? 'bg-tertiary/50' : ''}`}
+                            >
+                                <div className="w-5 h-5 rounded-full bg-secondary shadow-inner flex items-center justify-center text-sm ring-1 ring-border/20">
+                                    {persona.emoji}
+                                </div>
+                                <div className="flex-1 overflow-hidden">
+                                    <h4 className="text-xs font-medium text-text truncate">{persona.name}</h4>
+                                    {!isCompact && <p className="text-[10px] text-textLight truncate">{persona.role}</p>}
+                                </div>
+                                {hasChat && (
+                                    <div className="w-1 h-1 bg-green-500 rounded-full mr-1"></div>
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
-            ))}
+            ) : (
+                // Full Grouped View
+                Object.keys(grouped).map(category => (
+                    <div key={category}>
+                        {!isCompact && <h3 className="text-xs font-bold text-textLight uppercase tracking-wider mb-2 px-2">{category}</h3>}
+                        <div className="grid grid-cols-1 gap-1">
+                            {grouped[category].map(persona => {
+                                const hasChat = personaChats?.some(chat => chat.personaId === persona.id);
+                                return (
+                                    <button
+                                        key={persona.id}
+                                        onClick={() => onSelect(persona)}
+                                        className={`flex items-center gap-3 p-2 rounded-lg hover:bg-tertiary transition-colors text-left group relative ${hasChat ? 'bg-tertiary/50' : ''}`}
+                                    >
+                                        <span className="text-xl">{persona.emoji}</span>
+                                        <div className="flex-1 overflow-hidden">
+                                            <h4 className="text-sm font-normal text-text truncate">{persona.name}</h4>
+                                            {!isCompact && <p className="text-xs text-textLight truncate">{persona.role}</p>}
+                                        </div>
+                                        {hasChat && (
+                                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1"></div>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ))
+            )}
         </div>
     );
 }

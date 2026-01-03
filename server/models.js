@@ -92,7 +92,7 @@ const messageSchema = new mongoose.Schema({
     feedback: { type: String, enum: ['like', 'dislike', null], default: null },
     searchResults: [{ title: String, link: String, snippet: String }],
     weatherData: { type: Object },
-    timestamp: { type: Date, default: Date.now }
+    timestamp: { type: Date, default: Date.now, index: true }
 });
 
 // Models

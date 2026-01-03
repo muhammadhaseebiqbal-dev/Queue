@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Maximize2, Minimize2, Download, Copy, Check, Code, Eye } from 'lucide-react';
+import { X, Maximize2, Minimize2, Download, Copy, Check, Code, Eye, AlertTriangle, Wand2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -8,7 +8,7 @@ import mermaid from 'mermaid';
 import { LiveProvider, LiveError, LivePreview } from 'react-live';
 import html2pdf from 'html2pdf.js';
 
-const CanvasPanel = ({ isOpen, onClose, canvasData, versions = [], onSelectVersion, isStreaming }) => {
+const CanvasPanel = ({ isOpen, onClose, canvasData, versions = [], onSelectVersion, isStreaming, onFixRequest }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const [activeTab, setActiveTab] = useState('code'); // Default to Code as requested
     const [mermaidSvg, setMermaidSvg] = useState('');
@@ -34,7 +34,7 @@ const CanvasPanel = ({ isOpen, onClose, canvasData, versions = [], onSelectVersi
             // Setting it once on start is cleaner.
         }
         prevStreamingRef.current = isStreaming;
-    }, [isStreaming, canvasData]);
+    }, [isStreaming]);
 
     // Cleanup zoom on close/change
     useEffect(() => {
@@ -105,6 +105,31 @@ const CanvasPanel = ({ isOpen, onClose, canvasData, versions = [], onSelectVersi
         html2pdf().set(opt).from(element).save();
     };
 
+    const handleDownloadMermaidPNG = () => {
+        const svgContainer = document.querySelector('#canvas-content-area svg');
+        if (!svgContainer) return;
+
+        const svgData = new XMLSerializer().serializeToString(svgContainer);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+
+        img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.fillStyle = '#0a0a0a'; // Dark background
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+
+            const a = document.createElement('a');
+            a.download = `${canvasData?.title || 'diagram'}.png`;
+            a.href = canvas.toDataURL('image/png');
+            a.click();
+        };
+
+        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+    };
+
     const handleCopyCode = () => {
         navigator.clipboard.writeText(canvasData?.content || '');
         setCopied(true);
@@ -112,12 +137,29 @@ const CanvasPanel = ({ isOpen, onClose, canvasData, versions = [], onSelectVersi
     };
 
     const handleWheelZoom = (e) => {
-        if (activeTab !== 'preview') return;
+        // Only allow zoom for Visual types (Mermaid, maybe Image if added later)
+        // Explicitly disabled for Code/HTML previews as per user request
+        if (activeTab !== 'preview' || canvasData.type !== 'mermaid') return;
+
         if (e.deltaY !== 0) {
             const delta = e.deltaY * -0.001;
             setZoom(prev => Math.min(Math.max(prev + delta, 0.5), 3));
         }
     };
+
+    const [iframeError, setIframeError] = useState(null);
+
+    // Listen for Iframe Errors
+    useEffect(() => {
+        const handleMessage = (event) => {
+            if (event.data?.type === 'iframe_error') {
+                console.log("Canvas Error Caught:", event.data.message);
+                setIframeError(event.data.message);
+            }
+        };
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+    }, []);
 
     const cleanCode = (content) => {
         if (!content) return '';
@@ -146,6 +188,21 @@ const CanvasPanel = ({ isOpen, onClose, canvasData, versions = [], onSelectVersi
     };
 
     if (!canvasData) return null;
+
+    // INTELLIGENT UI: Determine capabilities based on type
+    let normalizedType = canvasData.type?.toLowerCase() || 'code';
+
+    // Auto-detect HTML if type is generic 'code' but content looks like HTML
+    if (normalizedType === 'code' && canvasData.content) {
+        if (canvasData.content.includes('<!DOCTYPE html>') ||
+            canvasData.content.includes('<html') ||
+            canvasData.content.includes('</script>')) {
+            normalizedType = 'html';
+        }
+    }
+
+    const isPreviewable = ['html', 'react', 'markdown', 'mermaid'].includes(normalizedType);
+    const isDownloadable = ['markdown', 'mermaid'].includes(normalizedType);
 
     const TabButton = ({ id, label, icon: Icon }) => (
         <button
@@ -204,14 +261,29 @@ const CanvasPanel = ({ isOpen, onClose, canvasData, versions = [], onSelectVersi
                         <div className="h-4 w-px bg-[#333]"></div>
                         <div className="flex">
                             <TabButton id="code" label="Code" icon={Code} />
-                            <TabButton id="preview" label="Preview" icon={Eye} />
+                            {isPreviewable && <TabButton id="preview" label="Preview" icon={Eye} />}
                         </div>
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
-                        <button onClick={handleDownloadPDF} className="p-2 text-zinc-500 hover:text-zinc-200 rounded-md transition-colors" title="Download PDF">
-                            <Download size={16} />
+                        {/* Manual Fix Button */}
+                        <button
+                            onClick={() => onFixRequest("The preview looks broken or empty. Please check the code for syntax errors, missing tags, or logic issues and fix it immediately.")}
+                            className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-md transition-colors"
+                            title="Fix Code with AI"
+                        >
+                            <Wand2 size={16} />
                         </button>
+
+                        {isDownloadable && (
+                            <button
+                                onClick={canvasData.type === 'mermaid' ? handleDownloadMermaidPNG : handleDownloadPDF}
+                                className="p-2 text-zinc-500 hover:text-zinc-200 rounded-md transition-colors"
+                                title={canvasData.type === 'mermaid' ? "Download PNG" : "Download PDF"}
+                            >
+                                <Download size={16} />
+                            </button>
+                        )}
                         <button onClick={() => setIsExpanded(!isExpanded)} className="p-2 text-zinc-500 hover:text-zinc-200 rounded-md transition-colors hidden md:block" title="Expand">
                             {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                         </button>
@@ -223,7 +295,7 @@ const CanvasPanel = ({ isOpen, onClose, canvasData, versions = [], onSelectVersi
 
                 <div className="flex-1 overflow-hidden bg-[#0a0a0a] relative flex flex-col" id="canvas-content-area">
                     <AnimatePresence mode="wait">
-                        {activeTab === 'preview' ? (
+                        {activeTab === 'preview' && isPreviewable ? (
                             <motion.div
                                 key="preview"
                                 initial={{ opacity: 0, scale: 0.98 }}
@@ -233,35 +305,98 @@ const CanvasPanel = ({ isOpen, onClose, canvasData, versions = [], onSelectVersi
                                 className="flex-1 w-full h-full overflow-hidden relative"
                                 onWheel={handleWheelZoom}
                             >
-                                <div className="absolute top-2 right-2 z-10 bg-black/50 px-2 py-1 rounded text-xs text-zinc-400 pointer-events-none">
-                                    Scroll to Zoom: {Math.round(zoom * 100)}%
-                                </div>
-                                <div className="w-full h-full overflow-auto custom-scrollbar p-4">
+                                {canvasData.type === 'mermaid' && (
+                                    <div className="absolute top-2 right-2 z-10 bg-black/50 px-2 py-1 rounded text-xs text-zinc-400 pointer-events-none">
+                                        Scroll to Zoom: {Math.round(zoom * 100)}%
+                                    </div>
+                                )}
+                                <div
+                                    className={`w-full h-full ${normalizedType === 'html' ? 'overflow-hidden' : 'overflow-auto custom-scrollbar p-4'}`}
+                                >
                                     <div
-                                        style={{
+                                        style={normalizedType === 'mermaid' ? {
                                             transform: `scale(${zoom})`,
                                             transformOrigin: 'top center',
                                             width: '100%',
                                             minHeight: '100%'
-                                        }}
-                                        className="transition-transform duration-100 ease-out"
+                                        } : { width: '100%', height: normalizedType === 'html' ? '100%' : 'auto', minHeight: '100%' }}
+                                        className={`transition-transform duration-100 ease-out ${normalizedType === 'html' ? 'flex flex-col' : ''}`}
                                     >
-                                        {canvasData.type === 'mermaid' && (
+                                        {normalizedType === 'mermaid' && (
                                             <div className="flex justify-center opacity-90 p-8">
                                                 <div dangerouslySetInnerHTML={{ __html: mermaidSvg }} className="w-full flex justify-center" />
                                             </div>
                                         )}
 
-                                        {canvasData.type === 'html' && (
-                                            <iframe
-                                                srcDoc={cleanCode(canvasData.content)}
-                                                title="preview"
-                                                className="w-full min-h-[600px] border-none bg-white rounded-lg shadow-lg"
-                                                sandbox="allow-scripts"
-                                            />
+                                        {normalizedType === 'html' && (
+                                            <div className="relative w-full h-full">
+                                                {/* Error Overlay */}
+                                                {iframeError && (
+                                                    <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-8">
+                                                        <div className="bg-[#1a1a1a] border border-red-500/30 rounded-xl p-6 max-w-md w-full shadow-2xl relative overflow-hidden group">
+                                                            <div className="absolute top-0 left-0 w-1 h-full bg-red-500/50"></div>
+                                                            <div className="flex items-start gap-4 mb-4">
+                                                                <div className="p-3 rounded-full bg-red-500/10 text-red-500 shrink-0">
+                                                                    <AlertTriangle size={24} />
+                                                                </div>
+                                                                <div>
+                                                                    <h3 className="text-lg font-bold text-red-100">Application Crashed</h3>
+                                                                    <p className="text-zinc-400 text-sm mt-1">
+                                                                        An runtime error occurred in the preview.
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="bg-black/50 rounded-lg p-3 font-mono text-xs text-red-300 border border-red-500/10 mb-6 overflow-x-auto">
+                                                                {iframeError}
+                                                            </div>
+
+                                                            <div className="flex gap-3">
+                                                                <button
+                                                                    onClick={() => setIframeError(null)}
+                                                                    className="flex-1 py-2 px-4 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition-colors"
+                                                                >
+                                                                    Dismiss
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => onFixRequest && onFixRequest(iframeError)}
+                                                                    className="flex-1 py-2 px-4 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-900/20"
+                                                                >
+                                                                    <Wand2 size={14} />
+                                                                    Fix with AI
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                <iframe
+                                                    srcDoc={(() => {
+                                                        const original = cleanCode(canvasData.content);
+                                                        // Inject Error Catching Script
+                                                        const script = `
+                                                            <script>
+                                                                window.onerror = function(msg, url, line, col, error) {
+                                                                    window.parent.postMessage({ type: 'iframe_error', message: msg + ' (Line ' + line + ')' }, '*');
+                                                                    return false;
+                                                                };
+                                                                window.addEventListener('unhandledrejection', function(event) {
+                                                                    window.parent.postMessage({ type: 'iframe_error', message: 'Unhandled Promise Rejection: ' + event.reason }, '*');
+                                                                });
+                                                            </script>
+                                                        `;
+                                                        // Inject right after <head> or <body>, or just prepend if neither found
+                                                        if (original.includes('<head>')) return original.replace('<head>', '<head>' + script);
+                                                        if (original.includes('<body>')) return original.replace('<body>', '<body>' + script);
+                                                        return script + original;
+                                                    })()}
+                                                    title="preview"
+                                                    className="w-full h-full border-none bg-white"
+                                                    sandbox="allow-scripts allow-forms allow-same-origin"
+                                                />
+                                            </div>
                                         )}
 
-                                        {canvasData.type === 'react' && (
+                                        {normalizedType === 'react' && (
                                             <LiveProvider
                                                 code={prepareReactCode(canvasData.content)}
                                                 noInline={true}
@@ -274,8 +409,29 @@ const CanvasPanel = ({ isOpen, onClose, canvasData, versions = [], onSelectVersi
                                             </LiveProvider>
                                         )}
 
-                                        {canvasData.type === 'markdown' && (
-                                            <div className="p-8 max-w-3xl mx-auto prose prose-invert prose-zinc text-zinc-300 prose-headings:text-zinc-100 prose-strong:text-zinc-100 prose-a:text-blue-400 prose-code:text-pink-400 prose-pre:bg-[#1a1a1a] bg-[#111] rounded-lg border border-[#222]">
+                                        {normalizedType === 'markdown' && (
+                                            <div className="markdown-body p-8 max-w-3xl mx-auto bg-[#0d1117] rounded-lg border border-[#30363d] text-[#c9d1d9] font-sans leading-relaxed">
+                                                {/* GitHub-like Markdown Styles injected manually to avoid deps */}
+                                                <style>{`
+                                                    .markdown-body h1, .markdown-body h2, .markdown-body h3 { border-bottom: 1px solid #21262d; padding-bottom: .3em; margin-bottom: 1em; margin-top: 24px; color: #e6edf3; font-weight: 600; }
+                                                    .markdown-body h1 { font-size: 2em; }
+                                                    .markdown-body h2 { font-size: 1.5em; }
+                                                    .markdown-body p { margin-bottom: 16px; line-height: 1.6; }
+                                                    .markdown-body a { color: #4493f8; text-decoration: none; }
+                                                    .markdown-body a:hover { text-decoration: underline; }
+                                                    .markdown-body code { padding: .2em .4em; margin: 0; font-size: 85%; background-color: #161b22; border-radius: 6px; font-family: ui-monospace,SFMono-Regular,SF Mono,Menlo,Consolas,Liberation Mono,monospace; }
+                                                    .markdown-body pre { padding: 16px; overflow: auto; font-size: 85%; line-height: 1.45; background-color: #161b22; border-radius: 6px; margin-bottom: 16px; }
+                                                    .markdown-body pre code { padding: 0; background-color: transparent; }
+                                                    .markdown-body ul, .markdown-body ol { padding-left: 2em; margin-bottom: 16px; }
+                                                    .markdown-body li { margin-bottom: 4px; }
+                                                    .markdown-body blockquote { padding: 0 1em; color: #8b949e; border-left: 0.25em solid #30363d; margin: 0 0 16px 0; }
+                                                    .markdown-body table { border-spacing: 0; border-collapse: collapse; margin-bottom: 16px; width: 100%; }
+                                                    .markdown-body table th, .markdown-body table td { padding: 6px 13px; border: 1px solid #30363d; }
+                                                    .markdown-body table tr { background-color: #0d1117; border-top: 1px solid #21262d; }
+                                                    .markdown-body table tr:nth-child(2n) { background-color: #161b22; }
+                                                    .markdown-body img { max-width: 100%; box-sizing: content-box; background-color: #0d1117; }
+                                                    .markdown-body hr { height: .25em; padding: 0; margin: 24px 0; background-color: #30363d; border: 0; }
+                                                `}</style>
                                                 <ReactMarkdown>{canvasData.content}</ReactMarkdown>
                                             </div>
                                         )}
@@ -302,7 +458,7 @@ const CanvasPanel = ({ isOpen, onClose, canvasData, versions = [], onSelectVersi
                                     </button>
                                 </div>
                                 <SyntaxHighlighter
-                                    language={canvasData.type === 'react' || canvasData.type === 'html' ? 'javascript' : 'markdown'}
+                                    language={normalizedType === 'react' || normalizedType === 'html' ? 'javascript' : 'markdown'}
                                     style={vscDarkPlus}
                                     customStyle={{ margin: 0, padding: '2rem', height: '100%', borderRadius: 0, fontSize: '13px', backgroundColor: '#0a0a0a' }}
                                     showLineNumbers={true}

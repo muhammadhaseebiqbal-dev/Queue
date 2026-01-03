@@ -156,10 +156,10 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             setIsLoadingHistory(true); // Show skeleton
 
             if (currentSessionId) {
-                // Load existing session
+                // Load existing session (Paginated)
                 try {
-                    const response = await axios.get(`${API_URL}/api/messages/${currentSessionId}`);
-                    const loadedMessages = response.data.messages;
+                    const response = await axios.get(`${API_URL}/api/messages/${currentSessionId}?limit=20`);
+                    const { messages: loadedMessages, hasMore } = response.data;
 
                     if (loadedMessages && loadedMessages.length > 0) {
                         // Transform DB messages to UI format
@@ -171,12 +171,12 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                             model: msg.model,
                             mode: msg.mode,
                             attachment: msg.attachment,
-                            feedback: msg.feedback
+                            feedback: msg.feedback,
+                            timestamp: msg.timestamp
                         }));
 
-
-
                         setcontext(formattedMessages);
+                        setHasMoreMessages(hasMore); // Set pagination state
                         setIsChatStarted(true);
 
                         // Mark this session as loaded
@@ -187,6 +187,12 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                             userId,
                             sessionId: currentSessionId
                         });
+                    } else {
+                        // Empty session
+                        setcontext([]);
+                        setHasMoreMessages(false);
+                        setIsChatStarted(true);
+                        loadedSessionRef.current = currentSessionId;
                     }
                 } catch (error) {
                     console.error('[ChatArea] Failed to load session:', error);
@@ -198,10 +204,16 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 loadedSessionRef.current = null;
                 setIsChatStarted(false);
                 setcontext([]);
+                setHasMoreMessages(false);
                 setpromptInput('');
                 setDeepMindPhase(0);
                 setDeepMindData({});
                 setIsLoadingHistory(false);
+
+                // Close Canvas on new chat
+                if (PanelInteractionVars?.setShowCanvas) {
+                    PanelInteractionVars.setShowCanvas(false);
+                }
 
                 // Reset backend state
                 axios.post(`${API_URL}/api/session/reset`, { userId })
@@ -213,6 +225,79 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     }, [PanelInteractionVars?.activeSessionId, userId])
 
     // Auto-select logic removed - handled by backend
+
+    // Listen for External Prompts (e.g. from CanvasPanel Error Fix)
+    useEffect(() => {
+        if (PanelInteractionVars?.externalPrompt) {
+            setpromptInput(PanelInteractionVars.externalPrompt);
+            // Wait a tick for state to update, then send
+            setTimeout(() => {
+                handleSend(null, PanelInteractionVars.externalPrompt);
+                PanelInteractionVars.setExternalPrompt(null);
+            }, 100);
+        }
+    }, [PanelInteractionVars?.externalPrompt]);
+
+    // Pagination State
+    const [hasMoreMessages, setHasMoreMessages] = useState(false);
+    const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+
+    // Handle Scroll Up to Load More
+    const loadOlderMessages = async () => {
+        if (!PanelInteractionVars?.activeSessionId || isLoadingOlder || !hasMoreMessages) return;
+
+        // Oldest message timestamp
+        const oldestMsg = context[0];
+        if (!oldestMsg || !oldestMsg.timestamp) return;
+
+        setIsLoadingOlder(true);
+        const currentScrollHeight = scrollContainerRef.current?.scrollHeight;
+
+        try {
+            const response = await axios.get(`${API_URL}/api/messages/${PanelInteractionVars.activeSessionId}`, {
+                params: {
+                    limit: 20,
+                    before: oldestMsg.timestamp
+                }
+            });
+
+            const { messages: olderMessages, hasMore } = response.data;
+
+            if (olderMessages.length > 0) {
+                const formattedOlder = olderMessages.map(msg => ({
+                    role: msg.role,
+                    content: msg.content,
+                    generatedImage: msg.generatedImage,
+                    type: msg.type, // 'text', 'image_generated'
+                    model: msg.model,
+                    mode: msg.mode,
+                    attachment: msg.attachment,
+                    feedback: msg.feedback,
+                    timestamp: msg.timestamp
+                }));
+
+                setcontext(prev => [...formattedOlder, ...prev]);
+                setHasMoreMessages(hasMore);
+
+                // Restore Scroll Position
+                // We need to wait for render, but roughly:
+                setTimeout(() => {
+                    if (scrollContainerRef.current) {
+                        const newScrollHeight = scrollContainerRef.current.scrollHeight;
+                        const heightDiff = newScrollHeight - currentScrollHeight;
+                        scrollContainerRef.current.scrollTop = heightDiff;
+                    }
+                }, 0);
+            } else {
+                setHasMoreMessages(false);
+            }
+
+        } catch (error) {
+            console.error("Failed to load older messages:", error);
+        } finally {
+            setIsLoadingOlder(false);
+        }
+    };
 
     // Handle Persona Switching
     useEffect(() => {
@@ -231,6 +316,12 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     const handleScroll = () => {
         if (!scrollContainerRef.current) return;
         const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+
+        // Auto-load trigger (e.g., when scrolled to very top)
+        if (scrollTop === 0 && hasMoreMessages) {
+            loadOlderMessages();
+        }
+
         // If user is within 100px of bottom, auto-scroll is enabled
         const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
         shouldAutoScrollRef.current = isAtBottom;
@@ -330,19 +421,48 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
         }
     }, [context, userId]);
 
-    const completeDeepMindQuery = async () => {
-        if (!promptInput || !promptInput.trim()) return;
+    // --- Unified Send Handler ---
+    const unifiedHandleSend = async (e, manualContent = null) => {
+        if (e) e.preventDefault();
+        const content = manualContent || promptInput;
+        // Allow sending if only attachment exists
+        if ((!content || !content.trim()) && !attachment) return;
+
+        if (isDeepMindEnabled) {
+            await completeDeepMindQuery(manualContent);
+        } else {
+            await completeQuery(e, manualContent);
+        }
+    };
+
+    // Listen for External Prompts (e.g. from CanvasPanel Error Fix)
+    useEffect(() => {
+        if (PanelInteractionVars?.externalPrompt) {
+            setpromptInput(PanelInteractionVars.externalPrompt);
+            // Immediate auto-send with the content
+            console.log("Auto-sending external prompt:", PanelInteractionVars.externalPrompt);
+            // Small timeout to ensure state (like promptInput visual) updates if needed, 
+            // though manualContent bypasses state dependency for the logic itself.
+            setTimeout(() => {
+                unifiedHandleSend(null, PanelInteractionVars.externalPrompt);
+                PanelInteractionVars.setExternalPrompt(null);
+            }, 100);
+        }
+    }, [PanelInteractionVars?.externalPrompt]);
+
+    const completeDeepMindQuery = async (manualContent = null) => {
+        const contentToUse = manualContent || promptInput;
+        if (!contentToUse || !contentToUse.trim()) return;
 
         try {
             setIsChatStarted(true);
-            setcontext(prev => [...prev, { role: "user", content: promptInput, model: 'deepmind', mode: 'deepmind' }]);
-            const userPrompt = promptInput;
+            setcontext(prev => [...prev, { role: "user", content: contentToUse, model: 'deepmind', mode: 'deepmind' }]);
             setpromptInput("");
 
             // Prepare DeepMind session
             const prepareRes = await axios.post(`${API_URL}/deepmind/prepare`, {
                 userId,
-                message: userPrompt,
+                message: contentToUse,
                 projectId: PanelInteractionVars?.activeProject?._id // Pass Active Project ID
             });
 
@@ -468,10 +588,14 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
 
     // detectCodingIntent removed - logic moved to backend
 
-    const completeQuery = async () => {
-        if ((!promptInput || !promptInput.trim()) && !attachment) return; // Allow sending if only attachment exists
+    const completeQuery = async (e, manualContent = null) => {
+        if (e) e.preventDefault();
 
-        const messageContent = promptInput; // Capture before clearing
+        const contentToUse = manualContent || promptInput;
+
+        if ((!contentToUse || !contentToUse.trim()) && !attachment) return; // Allow sending if only attachment exists
+
+        const messageContent = contentToUse; // Capture before clearing
 
         // --- Side-by-Side Mode Logic ---
         if (PanelInteractionVars?.isSideBySideMode) {
@@ -529,7 +653,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
 
         // Route to DeepMind if enabled
         if (isDeepMindEnabled) {
-            return completeDeepMindQuery();
+            return completeDeepMindQuery(messageContent);
         }
 
         try {
@@ -540,12 +664,12 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             // Add user message to context (Show attachment name if present)
             setcontext(prev => [...prev, {
                 role: "user",
-                content: promptInput,
+                content: messageContent,
                 attachment: attachment, // Store metadata for UI rendering
                 model: 'auto', // UI shows 'auto'
                 mode: 'standard'
             }]);
-            const messageToSend = promptInput;
+            const messageToSend = messageContent;
             setpromptInput("");
             const attachmentToSend = attachment; // Capture current attachment
             setAttachment(null); // Reset attachment state immediately
@@ -710,89 +834,62 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
 
                     const chunk = data.content;
 
-                    // CHECK 1: Are we already inside an artifact?
-                    if (state.isOpen) {
-                        console.log('[CANVAS DEBUG] Artifact is open, buffering content');
-                        // Check for closing tag in this chunk (or accumulated buffer)
-                        if (chunk.includes('</canvas-content>')) {
-                            console.log('[CANVAS DEBUG] Found closing tag, finalizing artifact');
-                            const [contentBeforeClose] = chunk.split('</canvas-content>');
-                            state.buffer += contentBeforeClose;
+                    // --- STATE-BASED CANVAS PARSER (Robust Index-Based logic) ---
+                    // 1. Detect OPENING TAG (search for last instance to handle multiple/sequential)
+                    const openTagMatch = [...state.rawStream.matchAll(/<canvas-content(?:\s+type=["']([^"']+)["'])?(?:\s+title=["']([^"']+)["'])?.*?>/gi)].pop();
 
-                            // Finalize Artifact
-                            console.log('[CANVAS DEBUG] Checking PanelInteractionVars.triggerCanvas:', typeof PanelInteractionVars.triggerCanvas);
-                            if (PanelInteractionVars.triggerCanvas) {
-                                console.log('[CANVAS DEBUG] Calling triggerCanvas with type:', state.type, 'title:', state.title);
-                                PanelInteractionVars.triggerCanvas(state.type, state.buffer, state.title);
-                            } else {
-                                console.error('[CANVAS DEBUG] triggerCanvas is NOT available!');
-                            }
-                            state.isOpen = false;
+                    if (openTagMatch) {
+                        const openTagFull = openTagMatch[0];
+                        const openTagIndex = openTagMatch.index;
+                        const openTagEndIndex = openTagIndex + openTagFull.length;
 
-                            // Update UI to show "View Artifact"
-                            const startMarker = '<canvas-content';
-                            const startIndex = state.rawStream.lastIndexOf(startMarker);
-                            if (startIndex !== -1) {
-                                // HIDE the raw tag in the chat
-                                const cleanDisplay = state.rawStream.substring(0, startIndex) + '\n\n*(View Artifact in Side Panel)*';
-                                streamingMessageRef.current = cleanDisplay;
-                            }
-                        } else {
-                            // Still open, append and stream
-                            state.buffer += chunk;
-                            if (PanelInteractionVars.triggerCanvas) {
-                                // Throttled update could be better, but direct is fine for now
-                                setTimeout(() => {
-                                    PanelInteractionVars.triggerCanvas(state.type, state.buffer, state.title);
-                                }, 0);
-                            }
-                        }
-                    }
-                    // CHECK 2: Start of new artifact?
-                    else if (!state.isOpen && state.rawStream.includes('<canvas-content')) {
-                        console.log('[CANVAS DEBUG] Detected canvas-content tag start');
-                        const tagStartIndex = state.rawStream.indexOf('<canvas-content');
-                        const sampleEnd = Math.min(tagStartIndex + 150, state.rawStream.length);
-                        console.log('[CANVAS DEBUG] Raw stream sample:', state.rawStream.substring(tagStartIndex, sampleEnd));
+                        // Identify properties
+                        const detectedType = openTagMatch[1] || 'html';
+                        const detectedTitle = openTagMatch[2] || 'Artifact';
 
-                        // Try to match the full opening tag
-                        const match = state.rawStream.match(/<canvas-content\s+type=["']([^"']+)["']\s+title=["']([^"']+)["']>/);
-
-                        if (match) {
-                            console.log('[CANVAS DEBUG] Regex matched! Type:', match[1], 'Title:', match[2]);
+                        // Check if this is a NEW artifact or we are already tracking it
+                        if (!state.isOpen) {
+                            console.log('[CANVAS DEBUG] New Artifact Detected:', detectedTitle);
                             state.isOpen = true;
-                            state.type = match[1];
-                            state.title = match[2];
-                            state.buffer = '';
+                            state.type = detectedType;
+                            state.title = detectedTitle;
+                            state.openIndex = openTagEndIndex;
+                        }
 
-                            const tagEndIndex = state.rawStream.indexOf('>', state.rawStream.lastIndexOf('<canvas-content'));
-                            if (tagEndIndex !== -1 && tagEndIndex < state.rawStream.length - 1) {
-                                state.buffer = state.rawStream.substring(tagEndIndex + 1);
-                                console.log('[CANVAS DEBUG] Initial buffer:', state.buffer.substring(0, 50));
+                        // 2. Detect CLOSING TAG
+                        // Search for closing tag *after* the opening tag, case-insensitive
+                        const closeTagIndex = state.rawStream.toLowerCase().indexOf('</canvas-content>', openTagEndIndex);
+
+                        if (closeTagIndex !== -1) {
+                            // Artifact is COMPLETE
+                            const content = state.rawStream.substring(openTagEndIndex, closeTagIndex);
+
+                            // Only trigger final update if we haven't already closed it (or to finalize buffer)
+                            if (state.isOpen) {
+                                console.log('[CANVAS DEBUG] Artifact Closed. Finalizing...');
+                                if (PanelInteractionVars.triggerCanvas) {
+                                    PanelInteractionVars.triggerCanvas(state.type, content, state.title);
+                                }
+                                state.isOpen = false;
                             }
-
-                            console.log('[CANVAS DEBUG] Checking PanelInteractionVars.setShowCanvas:', typeof PanelInteractionVars.setShowCanvas);
-                            console.log('[CANVAS DEBUG] Checking PanelInteractionVars.triggerCanvas:', typeof PanelInteractionVars.triggerCanvas);
-
-                            if (PanelInteractionVars.setShowCanvas) {
-                                console.log('[CANVAS DEBUG] Auto-open disabled by user request');
-                                // console.log('[CANVAS DEBUG] Calling setShowCanvas(true)');
-                                // setTimeout(() => PanelInteractionVars.setShowCanvas(true), 0);
-                            } else {
-                                console.error('[CANVAS DEBUG] setShowCanvas is NOT available!');
-                            }
-
-                            // START OF TAG DETECTED
-                            // specific tag logic can go here if needed
                         } else {
-                            console.log('[CANVAS DEBUG] Regex did NOT match yet, tag still assembling...');
+                            // Artifact is STILL OPEN (Streaming)
+                            // Extract content from OpenTagEnd to Current End
+                            const currentContent = state.rawStream.substring(openTagEndIndex);
+
+                            if (state.isOpen && PanelInteractionVars.triggerCanvas) {
+                                // Real-time update
+                                // We can throttle this if needed, but direct call is usually fine for text
+                                PanelInteractionVars.triggerCanvas(state.type, currentContent, state.title, [], true);
+                            }
                         }
                     }
 
-                    // 3. Update Chat UI with the (potentially modified) content
-                    // UNIFIED FIX: We DO NOT inject placeholders anymore. 
-                    // We let the raw <canvas-content> tag flow into the message so it persists in history.
-                    // The Renderer will handle hiding it and showing the card.
+
+
+                    // 3. Update Chat UI (Raw Stream)
+                    // We DO NOT strip the tags anymore. The "Unified Renderer" in the render loop
+                    // will detect <canvas-content> tags and render the interactive Card UI instead of raw text.
                     streamingMessageRef.current = state.rawStream;
 
                     setcontext(prev => {
@@ -943,41 +1040,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     return; // Stop processing this event
                 }
 
-                if (data.content || (data.type === 'content' && data.content)) {
-                    // Handle both simple {content: "..."} and typed {type: "content", content: "..."}
-                    const newContent = data.content || (data.type === 'content' ? data.content : "");
-                    streamingMessageRef.current += newContent;
 
-                    // Auto-Open Canvas Logic
-                    const allMatches = [...streamingMessageRef.current.matchAll(/<canvas-content[^>]*type="([^"]+)"[^>]*title="([^"]+)"[^>]*>([\s\S]*?)(?:<\/canvas-content>|$)/g)];
-                    if (allMatches.length > 0) {
-                        const last = allMatches[allMatches.length - 1];
-                        const type = last[1];
-                        const title = last[2];
-                        const content = last[3];
-                        if (PanelInteractionVars?.triggerCanvas) {
-                            PanelInteractionVars.triggerCanvas(type, content, title, [], true);
-                        }
-                    }
-
-                    // Update the last message with streamed content in real-time
-                    setcontext(prev => {
-                        const updated = [...prev];
-                        const lastIndex = updated.length - 1;
-
-                        // Safety check: ensure last message exists
-                        if (lastIndex >= 0 && updated[lastIndex]) {
-                            updated[lastIndex] = {
-                                ...updated[lastIndex],
-                                content: streamingMessageRef.current,
-                                streaming: true,
-                                // Ensure search status is done once content starts flowing
-                                searchStatus: updated[lastIndex].searchStatus === 'searching' ? 'done' : updated[lastIndex].searchStatus
-                            };
-                        }
-                        return updated;
-                    });
-                }
             };
 
             eventSourceRef.current.onerror = (error) => {
@@ -1003,8 +1066,8 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                         const currentContent = updated[updated.length - 1].content || '';
                         const hasArtifact = currentContent.includes('[[CANVAS_ARTIFACT');
 
-                        if (!hasArtifact && currentContent.length < 50) {
-                            updated[updated.length - 1].content += '\n\n**[Stream Error: Connection lost. Please try again.]**';
+                        if (!hasArtifact && (!currentContent || currentContent.trim().length === 0)) {
+                            updated[updated.length - 1].content += '\n\n**[Connection interrupted]**';
                         }
                         updated[updated.length - 1].streaming = false;
                     }
@@ -1544,7 +1607,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                     <AiInput
                         promptInput={promptInput}
                         setpromptInput={setpromptInput}
-                        handleSend={completeQuery}
+                        handleSend={unifiedHandleSend} // Use Wrapper
                         isDeepMindEnabled={isDeepMindEnabled}
                         toggleDeepMind={() => setIsDeepMindEnabled(!isDeepMindEnabled)}
                         isWebSearchEnabled={isWebSearchEnabled}

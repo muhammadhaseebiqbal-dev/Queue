@@ -5,6 +5,18 @@ import { ArrowLeft, Check, Sparkles, Zap, Brain, Image as ImageIcon, Lock, Mail,
 function Changelog() {
     const updates = [
         {
+            date: "January 3, 2026",
+            version: "v3.1.0",
+            title: "Chat Performance & Branding Update",
+            items: [
+                { icon: Zap, text: "Chat Performance Overhaul - Instant load times with smart pagination" },
+                { icon: Columns, text: "Sticky Scroll Landing Page - Premium card stacking effect" },
+                { icon: Sparkles, text: "Rebranded 'Personas' to 'Assistants' for clarity" },
+                { icon: Brain, text: "Introduced 'Queue' abstract model naming for simplified selection" },
+                { icon: Check, text: "Visual loader for background history fetching" }
+            ]
+        },
+        {
             date: "December 26, 2024",
             version: "v3.0.2",
             title: "Side-by-Side Mode & Model Updates",

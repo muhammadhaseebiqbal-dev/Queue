@@ -12,6 +12,11 @@ export const parseFile = async (buffer, mimeType, originalName) => {
     try {
         console.log(`[FileParser] Parsing ${originalName} (${mimeType})...`);
 
+        if (!buffer || buffer.length === 0) {
+            console.warn(`[FileParser] Empty buffer for file: ${originalName}`);
+            return "";
+        }
+
         // Handle PDF
         if (mimeType === 'application/pdf' || originalName.endsWith('.pdf')) {
             const data = await pdf(buffer);

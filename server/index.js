@@ -23,23 +23,57 @@ try {
 }
 
 // Helper: Smart Intent Detection
-function detectSmartIntent(text) {
+async function detectSmartIntent(text) {
     if (!text) return MODEL_INTENTS.find(i => i.matchType === 'fallback');
 
+    // 1. Keyword Regex Check (DISABLED BY USER REQUEST - RELY ON LLM ROUTER)
+    /*
     for (const rule of MODEL_INTENTS) {
         if (rule.matchType === 'keyword_regex' && rule.keywords) {
-            // Check if any keyword matches
             const match = rule.keywords.some(keyword => {
                 try {
-                    // Create regex from keyword string
                     const regex = new RegExp(keyword, 'i');
                     return regex.test(text);
                 } catch (e) { return false; }
             });
-            if (match) return rule;
+            if (match) {
+                // console.log(`[SmartIntent] Matched regex: ${rule.intent}`);
+                return rule;
+            }
         }
     }
-    // Return fallback
+    */
+
+    // 2. LLM Router (Main)
+    try {
+        console.log(`[SmartIntent] Asking LLM Router for: "${text.substring(0, 50)}..."`);
+        const completion = await groq.chat.completions.create({
+            messages: [
+                {
+                    role: "system",
+                    content: `Classify the user intent into exactly one of these categories: "coding", "image_generation", or "general". 
+- "coding": Writing code, debugging, html/css, scripts, terminal commands, technical explanations.
+- "image_generation": distinct request to create visuals.
+- "general": everything else.
+RETURN ONLY THE CATEGORY NAME (lowercase).`
+                },
+                { role: "user", content: text }
+            ],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0,
+            max_completion_tokens: 10
+        });
+
+        const category = completion.choices[0]?.message?.content?.trim().toLowerCase();
+        console.log(`[SmartIntent] LLM Classified as: ${category}`);
+
+        const rule = MODEL_INTENTS.find(i => i.intent === category);
+        if (rule) return rule;
+
+    } catch (e) {
+        console.error('[SmartIntent] Router Error:', e.message);
+    }
+
     return MODEL_INTENTS.find(i => i.matchType === 'fallback');
 }
 
@@ -312,6 +346,33 @@ app.post('/api/chat', async (req, res) => {
 
     // Log the request details as requested
     console.log(`[API/Chat] Request: Model=${model} (Resolved: ${resolvedModel})`);
+
+    // <<< INJECT CANVAS SYSTEM PROMPT >>>
+    const canvasSystemPrompt = {
+        role: "system",
+        content: `CANVAS PROTOCOL ENABLED
+You have access to an interactive "Canvas" side panel for generating substantial content.
+WHEN TO USE CANVAS:
+- For any standalone code (HTML/CSS/JS, React, Python script, full classes).
+- For Mermaid diagrams (flowcharts, sequence diagrams).
+- For long Markdown reports or documents.
+
+HOW TO USE CANVAS:
+- DO NOT use standard markdown code blocks (\`\`\`) for these items.
+- INSTEAD, wrap the content in a special XML-like tag:
+<canvas-content type="TYPE" title="TITLE">
+... content here ...
+</canvas-content>
+
+Supported Types: "html", "react", "mermaid", "markdown"
+Example:
+<canvas-content type="html" title="Landing Page">
+<!DOCTYPE html>...
+</canvas-content>
+        `
+    };
+    // Prepend to messages
+    messages.unshift(canvasSystemPrompt);
 
     // ROUTEWAY SPECIAL HANDLER (DeepSeek)
     if (resolvedModel === 'deepseek-v3.1-terminus:free') {
@@ -867,7 +928,20 @@ app.get('/stream/:id', async (req, res) => {
         let shouldSearch = false;
         let shouldWeather = false;
         let weatherLocation = null; // Declare here so it's accessible but request-scoped
-        let modelKey = payload.model || 'llama-3.3-70b'; // Default model
+        let modelKey = payload.model;
+
+        // Smart Router Integration
+        if (!modelKey || modelKey === 'auto') {
+            // Find last user message
+            const lastUserMsg = (payload.messages || []).slice().reverse().find(m => m.role === 'user')
+                || { content: payload.message || "" };
+
+            const smartRules = await detectSmartIntent(lastUserMsg.content);
+            modelKey = smartRules.model.id;
+            console.log(`[Smart Router] Selected: ${modelKey} (Intent: ${smartRules.intent})`);
+        } else {
+            modelKey = modelKey || 'llama-3.3-70b';
+        }
 
         let attachmentContext = "";
 
@@ -1134,12 +1208,36 @@ app.get('/stream/:id', async (req, res) => {
             }
         }
 
-        // SMART INTENT DETECTION (Replacing legacy header/config logic)
-        const lastUserMessage = finalMessages.findLast(m => m.role === 'user')?.content || "";
-        const detectedRule = detectSmartIntent(lastUserMessage);
-        const resolvedModel = detectedRule.model;
+        // RESOLVE MODEL PROVIDER (Based on modelKey determined earlier)
+        let resolvedModel = null;
+        let intentName = "custom";
 
-        console.log(`[Stream API] Intent: "${detectedRule.intent}" | Model: ${resolvedModel.id} | Provider: ${resolvedModel.provider}`);
+        // 1. Check Config-Driven Intents
+        const configRule = MODEL_INTENTS.find(i => i.model.id === modelKey);
+        if (configRule) {
+            resolvedModel = configRule.model;
+            intentName = configRule.intent;
+        }
+        // 2. Check Hardcoded configs (Legacy)
+        else if (MODEL_CONFIGS[modelKey]) {
+            resolvedModel = {
+                id: MODEL_CONFIGS[modelKey].model || modelKey,
+                provider: 'groq', // Default to Groq
+                endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+                config: MODEL_CONFIGS[modelKey]
+            };
+        }
+        else {
+            // Fallback to defaults
+            resolvedModel = {
+                id: modelKey,
+                provider: 'groq',
+                endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+                config: {}
+            };
+        }
+
+        console.log(`[Stream API] Intent: "${intentName}" | Model: ${resolvedModel.id} | Provider: ${resolvedModel.provider}`);
 
         // ROUTEWAY PROVIDER (DeepSeek)
         if (resolvedModel.provider === 'routeway') {
@@ -1333,19 +1431,43 @@ app.post('/api/session/reset', (req, res) => {
     res.json({ success: true });
 });
 
-// Get Messages for a Session
+// Get Messages for a Session (with Pagination)
 app.get('/api/messages/:sessionId', async (req, res) => {
     try {
         const { sessionId } = req.params;
+        const { limit = 20, before } = req.query; // Default limit 20
 
         if (!isConnected) {
             // Fallback: Return from memory if available
             const memSession = memorySessions.find(s => s._id === sessionId);
-            return res.json({ messages: memSession?.messages || [] });
+            return res.json({ messages: memSession?.messages || [], hasMore: false });
         }
 
-        const messages = await Message.find({ sessionId }).sort({ timestamp: 1 });
-        res.json({ messages });
+        const query = { sessionId };
+        if (before) {
+            query.timestamp = { $lt: new Date(before) };
+        }
+
+        const messages = await Message.find(query)
+            .sort({ timestamp: -1 }) // Sort DESC to get latest first
+            .limit(parseInt(limit))
+            .lean();
+
+        // Reverse back to chronological order for frontend
+        messages.reverse();
+
+        // Check if there are more messages
+        const oldestMessageTimestamp = messages.length > 0 ? messages[0].timestamp : null;
+        let hasMore = false;
+        if (oldestMessageTimestamp) {
+            const countEarlier = await Message.countDocuments({
+                sessionId,
+                timestamp: { $lt: oldestMessageTimestamp }
+            });
+            hasMore = countEarlier > 0;
+        }
+
+        res.json({ messages, hasMore });
     } catch (error) {
         console.error('[Messages API] Error:', error);
         res.status(500).json({ error: 'Failed to fetch messages' });
@@ -1618,7 +1740,7 @@ app.get('/deepmind/stream/:sessionId', async (req, res) => {
             : [
                 {
                     role: 'system',
-                    content: 'You are a hyper-intelligent AI assistant capable of deep reasoning and critical analysis. Your goal is to provide the most accurate, comprehensive, and hallucination-free answer possible.\n1. **Fact-Checking**: Verify every claim. If you differ from standard consensus, provide strong evidence.\n2. **Hallucination Prevention**: If you do not know something, explicitly state it. Do not invent facts, citations, or data.\n3. **Deep Reasoning**: THink step-by-step before answering complex queries.\n4. **LaTeX**: ALWAYS use LaTeX for math/physics ($...$ for inline, $$...$$ for display).\n5. **Tone**: Authoritative, precise, yet helpful.\n6. **Canvas Artifacts**: If you generate substantial code (HTML/React apps), Mermaid diagrams, or long Markdown reports, YOU MUST WRAP THEM in a `<canvas-content>` tag so they render in the side panel. Do NOT put them in the main chat. \n   - **Syntax**: `<canvas-content type="TYPE" title="TITLE">CONTENT</canvas-content>`\n   - **Types**: `mermaid` (for diagrams), `html` (for web apps), `react` (for components), `markdown` (for docs).\n   - **Example**: `<canvas-content type="mermaid" title="Flowchart">graph TD; A-->B;</canvas-content>`'
+                    content: 'You are a hyper-intelligent AI assistant capable of deep reasoning and critical analysis.\n1. **Fact-Checking**: Verify every claim. If you differ from standard consensus, provide strong evidence.\n2. **Hallucination Prevention**: If you do not know something, explicitly state it. Do not invent facts, citations, or data.\n3. **Deep Reasoning**: THink step-by-step before answering complex queries.\n4. **LaTeX**: ALWAYS use LaTeX for math/physics ($...$ for inline, $$...$$ for display).\n5. **Tone**: Authoritative, precise, yet helpful.\n6. **CANVAS PROTOCOL (STRICT)**:\n   - For standalone code (HTML, Python, etc.), Mermaid diagrams, or long reports, you **MUST** use the `<canvas-content>` tag.\n   - **DO NOT** use standard markdown code blocks (\`\`\`) for these items.\n   - **Syntax**: `<canvas-content type="TYPE" title="TITLE">CONTENT</canvas-content>`\n   - **Types**: `html`, `react`, `mermaid`, `markdown`.\n   - **Example**: `<canvas-content type="mermaid" title="Flowchart">graph TD; A-->B;</canvas-content>`'
                 },
                 ...session.messages
             ];

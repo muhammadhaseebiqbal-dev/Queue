@@ -4,6 +4,8 @@ import AiInput from "./components/ui/AiInput";
 import ChatArea from "./Sections/ChatArea";
 import Drawer from "./Sections/Panel";
 import CanvasPanel from "./Sections/CanvasPanel";
+import ExploreGpts from "./Sections/ExploreGpts";
+import SearchChatModal from "./components/ui/SearchChatModal";
 import { nanoid } from "nanoid";
 
 function Workspace() {
@@ -24,6 +26,11 @@ function Workspace() {
     const [activePersona, setActivePersona] = useState(null)
     const [isSideBySideMode, setIsSideBySideMode] = useState(false)
 
+    // View Mode State
+    const [viewMode, setViewMode] = useState('chat'); // 'chat' | 'explore'
+    const [showSearchModal, setShowSearchModal] = useState(false);
+    const [availableChats, setAvailableChats] = useState([]); // Hoisted state to pass to SearchModal
+
     // Canvas State
     const [showCanvas, setShowCanvas] = useState(false);
     const [canvasData, setCanvasData] = useState(null); // { type, content, title }
@@ -36,6 +43,8 @@ function Workspace() {
         setIsCanvasStreaming(isStreaming);
         setShowCanvas(true);
     };
+
+    const [externalPrompt, setExternalPrompt] = useState(null);
 
     const PanelInteractionVars = {
         isPanelExpanded: isPanelExpanded,
@@ -53,11 +62,20 @@ function Workspace() {
         setActivePersona,
         isSideBySideMode,
         setIsSideBySideMode,
-        triggerCanvas, // Expose to children
+        triggerCanvas,
         showCanvas,
         setShowCanvas,
         isCanvasStreaming,
-        setIsCanvasStreaming
+        setIsCanvasStreaming,
+        externalPrompt,          // Pass down
+        setExternalPrompt,       // Pass down
+
+        // Navigation & View State
+        viewMode,
+        setViewMode,
+        showSearchModal,
+        setShowSearchModal,
+        setAvailableChats // Allow Panel to hoist chats up
     }
 
     return (
@@ -68,7 +86,17 @@ function Workspace() {
             </Helmet>
             <Drawer {...PanelInteractionVars} />
             <div className="flex-1 flex flex-col min-w-0 relative">
-                <ChatArea {...PanelInteractionVars} />
+                {viewMode === 'explore' ? (
+                    <ExploreGpts
+                        onSelectPersona={(persona) => {
+                            setActivePersona(persona);
+                            // Also need to clear active session? Maybe not immediately, just let ChatArea handle it
+                        }}
+                        setViewMode={setViewMode}
+                    />
+                ) : (
+                    <ChatArea {...PanelInteractionVars} />
+                )}
             </div>
 
             <CanvasPanel
@@ -78,6 +106,26 @@ function Workspace() {
                 versions={canvasVersions}
                 onSelectVersion={(versionContent) => setCanvasData(prev => ({ ...prev, content: versionContent }))}
                 isStreaming={isCanvasStreaming}
+                onFixRequest={(errorMessage) => setExternalPrompt(`The HTML artifact crashed with this error:\n\`${errorMessage}\`\n\nPlease check the code and fix the issue.`)}
+            />
+
+            {/* Global Search Modal */}
+            <SearchChatModal
+                isOpen={showSearchModal}
+                onClose={() => setShowSearchModal(false)}
+                chats={availableChats}
+                onSelectChat={(chat) => {
+                    setActiveSessionId(chat.id);
+                    setViewMode('chat');
+                    // Reset others
+                    setActiveProject(null);
+                    setActivePersona(null);
+                }}
+                onNewChat={() => {
+                    setActiveSessionId(null);
+                    setChatResetToken(prev => prev + 1);
+                    setViewMode('chat');
+                }}
             />
         </div>
     );

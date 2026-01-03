@@ -23,15 +23,18 @@ function SearchStatus({ status, logs, sources, isAuto }) {
             {/* Status Header */}
             <div className="flex items-center gap-3 mb-3 text-textLight">
                 {status === 'searching' ? (
-                    <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                    >
-                        {logs.some(l => l.includes("Enhancing") || l.includes("Generating")) ?
-                            <Sparkles size={18} className="text-purple-400" /> :
-                            <Globe size={18} className="text-blue-400" />
-                        }
-                    </motion.div>
+                    <div className="flex items-center justify-center">
+                        {logs.some(l => l.includes("Enhancing") || l.includes("Generating")) ? (
+                            <Sparkles size={18} className="text-purple-400 animate-pulse" />
+                        ) : (
+                            <motion.div
+                                animate={{ rotate: 360 }}
+                                transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                            >
+                                <Globe size={18} className="text-blue-400" />
+                            </motion.div>
+                        )}
+                    </div>
                 ) : (
                     <CheckCircle size={18} className="text-secondary" />
                 )}

@@ -33,7 +33,18 @@
             "database",
             "sql",
             "mongo",
-            "query"
+            "query",
+            "make",
+            "create",
+            "build",
+            "generate",
+            "implement",
+            "develop",
+            "write",
+            "program",
+            "game",
+            "app",
+            "website"
         ],
         "model": {
             "id": "deepseek-v3.1-terminus:free",
