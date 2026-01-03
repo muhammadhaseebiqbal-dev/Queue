@@ -2,8 +2,67 @@ import express from "express";
 import dotenv from "dotenv";
 dotenv.config();
 import { Groq } from 'groq-sdk';
-
 import cors from 'cors';
+import axios from 'axios';
+
+// Route to Routeway (DeepSeek)
+async function getModelCompletionRouteway(req, res, messages, modelKey) {
+    const start = Date.now();
+    console.log(`[API/Chat] Service: ROUTEWAY | Model: ${modelKey} | Status: Starting...`);
+
+    // Set headers for SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    try {
+        const response = await axios.post('https://api.routeway.ai/v1/chat/completions', {
+            model: modelKey,
+            messages: messages,
+            stream: true
+        }, {
+            headers: {
+                'Authorization': `Bearer ${process.env.ROUTEWAY_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            responseType: 'stream'
+        });
+
+        response.data.on('data', (chunk) => {
+            const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
+            for (const line of lines) {
+                if (line.includes('[DONE]')) {
+                    res.write(`data: [DONE]\n\n`);
+                    return;
+                }
+                if (line.startsWith('data: ')) {
+                    try {
+                        const jsonStr = line.replace('data: ', '');
+                        const json = JSON.parse(jsonStr);
+                        const content = json.choices[0]?.delta?.content || "";
+                        if (content) {
+                            res.write(`${content}`);
+                        }
+                    } catch (e) {
+                        // Ignore parse errors for partial chunks
+                    }
+                }
+            }
+        });
+
+        response.data.on('end', () => {
+            console.log(`[API/Chat] Service: ROUTEWAY | Model: ${modelKey} | Status: Completed (${Date.now() - start}ms)`);
+            res.end();
+        });
+
+    } catch (error) {
+        console.error(`[API/Chat] Service: ROUTEWAY | Error:`, error.message);
+        res.write(`\n\n[Error: Failed to connect to DeepSeek/Routeway: ${error.message}]`);
+        res.end();
+    }
+}
+
+
 
 import { performSearch } from './utils/search.js';
 import { detectSearchIntent } from './utils/intent.js';
@@ -209,26 +268,34 @@ app.post('/api/chat', async (req, res) => {
         return res.status(400).json({ error: "Missing messages or model" });
     }
 
-    // Map Frontend IDs to Actual Groq Models
-    const MODEL_MAP = {
-        'gpt-oss-120b': 'llama-3.3-70b-versatile', // Mapping "GPT-OSS" to Llama 3.3 70B
-        'qwen-3-32b': 'llama-3.1-8b-instant',       // Mapping "Qwen" to Llama 3.1 8B (Fast)
-        'llama-3.3-70b': 'llama-3.3-70b-versatile', // Correcting specific ID
-        'kimi-k2': 'llama-3.1-8b-instant'           // Mapping "Kimi" to Llama 3.1 8B (Fast)
-    };
+    // Use Global Configs instead of hardcoded map
+    const config = MODEL_CONFIGS[model] || MODEL_CONFIGS['llama-3.3-70b'];
+    const resolvedModel = config.model; // The actual model ID used downstream
 
-    const targetModel = MODEL_MAP[model] || 'llama-3.3-70b-versatile';
+    // Log the request details as requested
+    console.log(`[API/Chat] Request: Model=${model} (Resolved: ${resolvedModel})`);
 
-    // Set headers for streaming
+    // ROUTEWAY SPECIAL HANDLER (DeepSeek)
+    if (resolvedModel === 'deepseek-v3.1-terminus:free') {
+        return getModelCompletionRouteway(req, res, messages, resolvedModel);
+    }
+
+    // GROQ HANDLER (Standard)
+    console.log(`[API/Chat] Service: GROQ | Model: ${resolvedModel} | Status: Starting...`);
+
+    // Set headers for streaming text only (Groq SDK standard stream)
     res.setHeader('Content-Type', 'text/plain');
     res.setHeader('Transfer-Encoding', 'chunked');
 
     try {
         const stream = await groq.chat.completions.create({
             messages: messages,
-            model: targetModel,
+            model: resolvedModel,
+            temperature: config.temperature,
+            max_completion_tokens: config.max_completion_tokens,
+            top_p: config.top_p,
             stream: true,
-            max_tokens: 1024
+            ...(config.reasoning_effort && { reasoning_effort: config.reasoning_effort })
         });
 
         for await (const chunk of stream) {
@@ -238,9 +305,10 @@ app.post('/api/chat', async (req, res) => {
             }
         }
 
+        console.log(`[API/Chat] Service: GROQ | Model: ${resolvedModel} | Status: Completed`);
         res.end();
     } catch (error) {
-        console.error(`[API/Chat] Error streaming ${model}:`, error);
+        console.error(`[API/Chat] Service: GROQ | Error:`, error);
         res.write(`\n\n[Error: ${error.message}]`);
         res.end();
     }
@@ -551,6 +619,13 @@ const MODEL_CONFIGS = {
         temperature: 1,
         max_completion_tokens: 1024,
         top_p: 1
+    },
+    'deepseek-v3.1-terminus:free': {
+        model: 'deepseek-v3.1-terminus:free',
+        temperature: 1,
+        max_completion_tokens: 8192,
+        top_p: 1,
+        reasoning_effort: 'medium'
     }
 
 };
@@ -731,16 +806,24 @@ app.get('/stream/:id', async (req, res) => {
             }));
 
         // Add system prompt for LaTeX rendering if not already present
-        const hasSystemPrompt = cleanedMessages.some(msg => msg.role === 'system');
-        let finalMessages = hasSystemPrompt
-            ? cleanedMessages
-            : [
-                {
-                    role: 'system',
-                    content: 'You are Queue, a helpful AI assistant created by Haseeb Iqbal. \n1. **Math**: ALWAYS use LaTeX ($...$, $$...$$).\n2. **Canvas Artifacts**: If generating substantial code, diagrams, or docs, WRAP them in `<canvas-content type="TYPE" title="TITLE">CONTENT</canvas-content>`. Supported types: `mermaid`, `html`, `react`, `markdown`. Do NOT put the content in the main chat if wrapped.'
-                },
-                ...cleanedMessages
-            ];
+        // Add system prompt for LaTeX rendering and Canvas Artifacts
+        const canvasInstruction = 'You are Queue, a helpful AI assistant created by Haseeb Iqbal. \n1. **Math**: ALWAYS use LaTeX ($...$, $$...$$).\n2. **Canvas Artifacts**: If generating substantial code, diagrams, or docs, WRAP them in `<canvas-content type="TYPE" title="TITLE">CONTENT</canvas-content>`. Supported types: `mermaid`, `html`, `react`, `markdown`. \n   - **CRITICAL**: The content inside the tag must be PURE code/markdown. Do NOT include explanations, "Here is the code", or extra text INSIDE the tag. Put those OUTSIDE.\n   - **Mermaid**: Only the mermaid code inside.\n3. **Single File Web Projects**: If generating a web page (HTML/CSS/JS), ALWAYS combine them into a single HTML file with embedded `<style>` and `<script>` tags so it runs immediately.';
+
+        const systemMsgIndex = cleanedMessages.findIndex(msg => msg.role === 'system');
+        let finalMessages = [...cleanedMessages];
+
+        if (systemMsgIndex !== -1) {
+            // Append instructions to the existing system prompt if not present
+            if (!finalMessages[systemMsgIndex].content.includes('Canvas Artifacts')) {
+                finalMessages[systemMsgIndex].content = `${canvasInstruction}\n\n[ADDITIONAL CONTEXT]\n${finalMessages[systemMsgIndex].content}`;
+            }
+        } else {
+            // No system prompt, add it at the start
+            finalMessages.unshift({
+                role: 'system',
+                content: canvasInstruction
+            });
+        }
 
         // Logic for Intelligent Search Routing
         let shouldSearch = false;
@@ -1015,24 +1098,86 @@ app.get('/stream/:id', async (req, res) => {
 
         // Get model config
         const config = MODEL_CONFIGS[modelKey] || MODEL_CONFIGS['llama-3.3-70b'];
+        const resolvedModel = config.model;
 
-        // Use Groq for all models
-        const chatCompletion = await groq.chat.completions.create({
-            messages: finalMessages,
-            model: config.model,
-            temperature: config.temperature,
-            max_completion_tokens: config.max_completion_tokens,
-            top_p: config.top_p,
-            stream: true,
-            stop: null,
-            ...(config.reasoning_effort && { reasoning_effort: config.reasoning_effort })
-        });
+        // Log the request
+        console.log(`[Stream API] Request: Model=${modelKey} (Resolved: ${resolvedModel})`);
 
-        for await (const chunk of chatCompletion) {
-            const content = chunk.choices[0]?.delta?.content || '';
-            if (content && typeof content === 'string') {
-                res.write(`data: ${JSON.stringify({ type: 'content', content })}\n\n`);
+        // DEEPSEEK ROUTING
+        if (resolvedModel === 'deepseek-v3.1-terminus:free') {
+            console.log(`[Stream API] Service: ROUTEWAY | Model: ${resolvedModel} | Status: Starting...`);
+
+            try {
+                const response = await axios.post('https://api.routeway.ai/v1/chat/completions', {
+                    model: resolvedModel,
+                    messages: finalMessages,
+                    stream: true
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${process.env.ROUTEWAY_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    responseType: 'stream'
+                });
+
+                response.data.on('data', (chunk) => {
+                    const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
+                    for (const line of lines) {
+                        if (line.includes('[DONE]')) {
+                            // Do not close yet, wait for 'done' signal at end
+                            return;
+                        }
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const jsonStr = line.replace('data: ', '');
+                                const json = JSON.parse(jsonStr);
+                                const content = json.choices[0]?.delta?.content || "";
+                                if (content) {
+                                    res.write(`data: ${JSON.stringify({ type: 'content', content })}\n\n`);
+                                }
+                            } catch (e) {
+                                // Ignore parse errors for partial chunks
+                            }
+                        }
+                    }
+                });
+
+                // Wait for stream to finish
+                await new Promise((resolve, reject) => {
+                    response.data.on('end', resolve);
+                    response.data.on('error', reject);
+                });
+
+                console.log(`[Stream API] Service: ROUTEWAY | Model: ${resolvedModel} | Status: Completed`);
+
+            } catch (error) {
+                console.error(`[Stream API] Service: ROUTEWAY | Error:`, error.message);
+                throw error; // Let outer catch handle it
             }
+
+        } else {
+            // STANDARD GROQ HANDLER
+            console.log(`[Stream API] Service: GROQ | Model: ${resolvedModel} | Status: Starting...`);
+
+            // Use Groq for all models
+            const chatCompletion = await groq.chat.completions.create({
+                messages: finalMessages,
+                model: resolvedModel,
+                temperature: config.temperature,
+                max_completion_tokens: config.max_completion_tokens,
+                top_p: config.top_p,
+                stream: true,
+                stop: null,
+                ...(config.reasoning_effort && { reasoning_effort: config.reasoning_effort })
+            });
+
+            for await (const chunk of chatCompletion) {
+                const content = chunk.choices[0]?.delta?.content || '';
+                if (content && typeof content === 'string') {
+                    res.write(`data: ${JSON.stringify({ type: 'content', content })}\n\n`);
+                }
+            }
+            console.log(`[Stream API] Service: GROQ | Model: ${resolvedModel} | Status: Completed`);
         }
 
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`);

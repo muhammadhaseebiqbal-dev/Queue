@@ -62,9 +62,14 @@ const CanvasPanel = ({ isOpen, onClose, canvasData, versions = [], onSelectVersi
                 securityLevel: 'loose',
                 suppressErrorRendering: true,
             });
-            // FIX: Strip markdown code fences AND potential trailing closing tags (complete or partial)
-            let cleanContent = canvasData.content
-                .replace(/```mermaid\n?|```/g, '')
+            // FIX: Aggressive parsing to handle "leaked" text
+            // 1. Try to extract content INSIDE markdown code fences first
+            const fenceMatch = canvasData.content.match(/```mermaid\n([\s\S]*?)\n```/);
+            let cleanContent = fenceMatch ? fenceMatch[1] : canvasData.content;
+
+            // 2. Cleanup remaining artifacts if no fences were found or if fences were messy
+            cleanContent = cleanContent
+                .replace(/```mermaid\n?|```/g, '') // Strip remaining fences
                 .replace(/<\/canvas-content>[\s\S]*$/i, '') // Standard closing tag
                 .replace(/<\/?canvas(?:-content)?(?:[^>]+)?$/i, '') // Partial tag at end of stream
                 .trim();
@@ -270,7 +275,7 @@ const CanvasPanel = ({ isOpen, onClose, canvasData, versions = [], onSelectVersi
                                         )}
 
                                         {canvasData.type === 'markdown' && (
-                                            <div className="p-8 max-w-3xl mx-auto prose prose-invert prose-zinc bg-[#111] rounded-lg border border-[#222]">
+                                            <div className="p-8 max-w-3xl mx-auto prose prose-invert prose-zinc text-zinc-300 prose-headings:text-zinc-100 prose-strong:text-zinc-100 prose-a:text-blue-400 prose-code:text-pink-400 prose-pre:bg-[#1a1a1a] bg-[#111] rounded-lg border border-[#222]">
                                                 <ReactMarkdown>{canvasData.content}</ReactMarkdown>
                                             </div>
                                         )}

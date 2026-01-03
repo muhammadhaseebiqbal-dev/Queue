@@ -501,6 +501,17 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
         }
     };
 
+    const detectCodingIntent = (text) => {
+        if (!text) return false;
+        const codingKeywords = [
+            /function/i, /const/i, /import/i, /export/i, /class/i, /return/i,
+            /console\./i, /=>/i, /\{[\s\S]*\}/, // Code syntax
+            /python/i, /javascript/i, /typescript/i, /react/i, /node/i, /css/i, /html/i,
+            /debug/i, /fix/i, /error/i, /exception/i, /bug/i, /code/i, /script/i
+        ];
+        return codingKeywords.some(regex => regex.test(text));
+    };
+
     const completeQuery = async () => {
         if ((!promptInput || !promptInput.trim()) && !attachment) return; // Allow sending if only attachment exists
 
@@ -569,13 +580,24 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             // Set chat as started
             setIsChatStarted(true);
 
+            // INTELLIGENT MODEL SELECTION
+            // If coding is detected, override to Large Context Model (gpt-oss-120b -> Llama 3.3 70B)
+            let actualModel = selectedModel;
+            const isCoding = detectCodingIntent(promptInput);
+
+            if (isCoding && selectedModel !== 'deepseek-v3.1-terminus:free') {
+                console.log("[SmartSwitch] Coding intent detected! Switching to DeepSeek (v3.1 Terminus)");
+                actualModel = 'deepseek-v3.1-terminus:free';
+            }
+
             // Add user message to context (Show attachment name if present)
             setcontext(prev => [...prev, {
                 role: "user",
                 content: promptInput,
                 attachment: attachment, // Store metadata for UI rendering
-                model: selectedModel,
-                mode: 'standard'
+                model: actualModel, // UI shows actual used model
+                mode: 'standard',
+                autoSwitched: isCoding && actualModel !== selectedModel // Optional flag for UI
             }]);
             const messageToSend = promptInput;
             setpromptInput("");
@@ -666,7 +688,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             const response = await axios.post(`${API_URL}/prepare-stream`, {
                 message: messageToSend,
                 userId: userId,
-                model: selectedModel,
+                model: actualModel, // Use the detected/switched model
                 isWebSearchEnabled: isWebSearchEnabled,
                 attachment: attachmentToSend, // Pass attachment to backend
                 projectId: PanelInteractionVars?.activeProject?._id, // Pass active project ID
