@@ -1253,7 +1253,14 @@ app.get('/stream/:id', async (req, res) => {
                     headers: {
                         'Authorization': `Bearer ${process.env.ROUTEWAY_API_KEY}`,
                         'Content-Type': 'application/json',
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Origin': 'https://queueai.app',
+                        'Referer': 'https://queueai.app/',
+                        'Sec-Fetch-Dest': 'empty',
+                        'Sec-Fetch-Mode': 'cors',
+                        'Sec-Fetch-Site': 'cross-site'
                     },
                     responseType: 'stream'
                 });
