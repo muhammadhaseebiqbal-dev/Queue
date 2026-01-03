@@ -22,13 +22,13 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     const [isSendPrompt, setIsSendPrompt] = useState(false)
     const [context, setcontext] = useState([])
     const [isStreaming, setIsStreaming] = useState(false)
-    const [selectedModel, setSelectedModel] = useState('gpt-oss-120b')
+    // const [selectedModel, setSelectedModel] = useState('gpt-oss-120b') // Removed for config-driven architecture
     const [isDeepMindEnabled, setIsDeepMindEnabled] = useState(false)
     const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false)
     const [attachment, setAttachment] = useState(null) // New Attachment State
     const [deepMindPhase, setDeepMindPhase] = useState(0)
     const [deepMindData, setDeepMindData] = useState({})
-    const [isMobileModelDropdownOpen, setIsMobileModelDropdownOpen] = useState(false)
+
     const [showScrollButton, setShowScrollButton] = useState(false)
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
     const [showResetModal, setShowResetModal] = useState(false)
@@ -40,12 +40,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
         'kimi-k2': ''
     });
 
-    const models = [
-        { id: 'gpt-oss-120b', name: 'GPT-OSS 120B', Icon: Bot },
-        { id: 'qwen-3-32b', name: 'QWEN 3 32B', Icon: Rocket },
-        { id: 'llama-3.3-70b', name: 'LLAMA 3.3 70B', Icon: Mountain },
-        { id: 'kimi-k2', name: 'KIMI K2', Icon: Moon }
-    ]
+
 
     // const [userId] = useState(() => nanoid()) // Removed: using shared userId from App
     const userId = PanelInteractionVars.userId;
@@ -217,16 +212,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
         loadSession();
     }, [PanelInteractionVars?.activeSessionId, userId])
 
-    // Auto-select largest context model when in a project, reset to default otherwise
-    useEffect(() => {
-        if (PanelInteractionVars?.activeProject) {
-            // llama-3.3-70b-versatile has 128k context window (largest)
-            setSelectedModel('llama-3.3-70b-versatile');
-        } else {
-            // Reset to default model for standard chats
-            setSelectedModel('gpt-oss-120b');
-        }
-    }, [PanelInteractionVars?.activeProject]);
+    // Auto-select logic removed - handled by backend
 
     // Handle Persona Switching
     useEffect(() => {
@@ -239,18 +225,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
     }, [PanelInteractionVars?.activePersona]);
 
 
-    const mobileDropdownRef = useRef(null)
 
-    // Close mobile dropdown when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (mobileDropdownRef.current && !mobileDropdownRef.current.contains(event.target)) {
-                setIsMobileModelDropdownOpen(false)
-            }
-        }
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [])
 
     // Handle scroll events to detect if user has scrolled up
     const handleScroll = () => {
@@ -282,17 +257,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
         }
     }, [context, isStreaming])
 
-    // Detect model change and add separator
-    useEffect(() => {
-        if (previousModel.current !== selectedModel && context.length > 0) {
-            setcontext(prev => [...prev, {
-                role: "separator",
-                content: `Model changed to ${selectedModel.toUpperCase().replace(/-/g, ' ')} `,
-                model: selectedModel
-            }]);
-        }
-        previousModel.current = selectedModel;
-    }, [selectedModel]);
+    // Model change separator effect removed
 
     // Use a Ref to track activeSessionId synchronously to prevent race conditions during rapid updates
     const activeSessionIdRef = useRef(PanelInteractionVars?.activeSessionId);
@@ -370,7 +335,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
 
         try {
             setIsChatStarted(true);
-            setcontext(prev => [...prev, { role: "user", content: promptInput, model: selectedModel, mode: 'deepmind' }]);
+            setcontext(prev => [...prev, { role: "user", content: promptInput, model: 'deepmind', mode: 'deepmind' }]);
             const userPrompt = promptInput;
             setpromptInput("");
 
@@ -501,16 +466,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
         }
     };
 
-    const detectCodingIntent = (text) => {
-        if (!text) return false;
-        const codingKeywords = [
-            /function/i, /const/i, /import/i, /export/i, /class/i, /return/i,
-            /console\./i, /=>/i, /\{[\s\S]*\}/, // Code syntax
-            /python/i, /javascript/i, /typescript/i, /react/i, /node/i, /css/i, /html/i,
-            /debug/i, /fix/i, /error/i, /exception/i, /bug/i, /code/i, /script/i
-        ];
-        return codingKeywords.some(regex => regex.test(text));
-    };
+    // detectCodingIntent removed - logic moved to backend
 
     const completeQuery = async () => {
         if ((!promptInput || !promptInput.trim()) && !attachment) return; // Allow sending if only attachment exists
@@ -580,24 +536,14 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             // Set chat as started
             setIsChatStarted(true);
 
-            // INTELLIGENT MODEL SELECTION
-            // If coding is detected, override to Large Context Model (gpt-oss-120b -> Llama 3.3 70B)
-            let actualModel = selectedModel;
-            const isCoding = detectCodingIntent(promptInput);
-
-            if (isCoding && selectedModel !== 'deepseek-v3.1-terminus:free') {
-                console.log("[SmartSwitch] Coding intent detected! Switching to DeepSeek (v3.1 Terminus)");
-                actualModel = 'deepseek-v3.1-terminus:free';
-            }
 
             // Add user message to context (Show attachment name if present)
             setcontext(prev => [...prev, {
                 role: "user",
                 content: promptInput,
                 attachment: attachment, // Store metadata for UI rendering
-                model: actualModel, // UI shows actual used model
-                mode: 'standard',
-                autoSwitched: isCoding && actualModel !== selectedModel // Optional flag for UI
+                model: 'auto', // UI shows 'auto'
+                mode: 'standard'
             }]);
             const messageToSend = promptInput;
             setpromptInput("");
@@ -688,7 +634,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
             const response = await axios.post(`${API_URL}/prepare-stream`, {
                 message: messageToSend,
                 userId: userId,
-                model: actualModel, // Use the detected/switched model
+                model: null, // Let backend decide based on intent
                 isWebSearchEnabled: isWebSearchEnabled,
                 attachment: attachmentToSend, // Pass attachment to backend
                 projectId: PanelInteractionVars?.activeProject?._id, // Pass active project ID
@@ -706,7 +652,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                 searchStatus: isWebSearchEnabled ? 'searching' : null,
                 searchLogs: [],
                 searchSources: [],
-                model: selectedModel,
+                model: 'auto',
                 mode: 'standard'
             }]);
             setIsStreaming(true);
@@ -1205,48 +1151,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
 
 
 
-            {/* Mobile Model Switcher */}
-            {!PanelInteractionVars?.activeProject && (
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 md:hidden z-50 flex flex-col items-center" ref={mobileDropdownRef}>
-                    <button
-                        onClick={() => setIsMobileModelDropdownOpen(!isMobileModelDropdownOpen)}
-                        className="bg-tertiary/80 backdrop-blur-md h-10 rounded-full border border-border/50 px-4 flex items-center gap-2 text-text text-sm shadow-lg"
-                    >
-                        {(() => {
-                            const ModelIcon = models.find(m => m.id === selectedModel)?.Icon || Bot;
-                            return <ModelIcon size={14} className="shrink-0 text-textLight" />;
-                        })()}
-                        <span className="font-medium text-xs">{models.find(m => m.id === selectedModel)?.name}</span>
-                        <ChevronDown size={12} className={`text-textLight transition-transform duration-200 ${isMobileModelDropdownOpen ? 'rotate-180' : ''}`} />
-                    </button>
 
-                    <AnimatePresence>
-                        {isMobileModelDropdownOpen && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                                className="absolute top-full mt-2 w-[180px] bg-secondary/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden py-1"
-                            >
-                                {models.map((model) => (
-                                    <button
-                                        key={model.id}
-                                        onClick={() => {
-                                            setSelectedModel(model.id);
-                                            setIsMobileModelDropdownOpen(false);
-                                        }}
-                                        className={`w-full px-4 py-3 text-left text-xs flex items-center gap-3 active:bg-white/10 transition-colors ${selectedModel === model.id ? 'text-blue-400 bg-blue-500/10' : 'text-text'
-                                            }`}
-                                    >
-                                        <model.Icon size={14} />
-                                        {model.name}
-                                    </button>
-                                ))}
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
-            )}
 
             {/* Welcome Screen - Shows when no chat is started */}
             {!isChatStarted && !PanelInteractionVars?.activePersona && !PanelInteractionVars?.isSideBySideMode && (
@@ -1644,8 +1549,7 @@ function ChatArea({ isPanelExpanded, setIsPanelExpanded, ...PanelInteractionVars
                         toggleDeepMind={() => setIsDeepMindEnabled(!isDeepMindEnabled)}
                         isWebSearchEnabled={isWebSearchEnabled}
                         setIsWebSearchEnabled={setIsWebSearchEnabled}
-                        selectedModel={selectedModel}
-                        setSelectedModel={setSelectedModel}
+
                         isChatStarted={isChatStarted}
                         isStreaming={isStreaming}
                         stopGeneration={() => {

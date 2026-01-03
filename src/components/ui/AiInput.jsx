@@ -7,8 +7,7 @@ import { API_URL } from "../../config"
 
 function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput, isSendPrompt, setIsSendPrompt, selectedModel, setSelectedModel, isDeepMindEnabled, setIsDeepMindEnabled, toggleDeepMind, isWebSearchEnabled, setIsWebSearchEnabled, attachment, setAttachment, activeProject, activePersona, handleSend, isStreaming, stopGeneration, className }) {
 
-    const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
-    const dropdownRef = useRef(null)
+
     const fileInputRef = useRef(null)
 
     // Voice Input State
@@ -98,12 +97,7 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
         }
     };
 
-    const models = [
-        { id: 'gpt-oss-120b', name: 'GPT-OSS 120B', Icon: Bot },
-        { id: 'qwen-3-32b', name: 'QWEN 3 32B', Icon: Rocket },
-        { id: 'llama-3.3-70b', name: 'LLAMA 3.3 70B', Icon: Mountain },
-        { id: 'kimi-k2', name: 'KIMI K2', Icon: Moon }
-    ]
+
 
     const textareaRef = useRef(null)
 
@@ -115,16 +109,7 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
         }
     }, [promptInput]);
 
-    // Close dropdown when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                setIsModelDropdownOpen(false)
-            }
-        }
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [])
+
 
     const toggleChatStatus = () => {
         if (setIsChatStarted) {
@@ -162,10 +147,7 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
         // Height will auto-reset via useEffect when promptInput clears
     }
 
-    const handleModelSelect = (modelId) => {
-        setSelectedModel(modelId)
-        setIsModelDropdownOpen(false)
-    }
+
 
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
@@ -381,47 +363,7 @@ function AiInput({ setIsChatStarted, isChatStarted, promptInput, setpromptInput,
                 </AnimatePresence>
 
                 <div className="flex gap-2 relative">
-                    {/* Model Selector - Hidden when in a project or persona mode */}
-                    {!activeProject && !activePersona && (
-                        <div className="relative hidden md:block" ref={dropdownRef}>
-                            <button
-                                onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                                className="bg-tertiary h-11 rounded-2xl border-2 border-borderLight px-3 flex items-center gap-2 text-text text-sm cursor-pointer hover:bg-secondary transition-colors w-[140px] justify-between"
-                            >
-                                <div className="flex items-center gap-2 overflow-hidden">
-                                    {(() => {
-                                        const ModelIcon = models.find(m => m.id === selectedModel)?.Icon || Bot;
-                                        return <ModelIcon size={16} className="shrink-0" />;
-                                    })()}
-                                    <span className="truncate">{models.find(m => m.id === selectedModel)?.name}</span>
-                                </div>
-                                <ChevronDown size={14} className={`text-textLight transition-transform duration-200 ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
-                            </button>
 
-                            <AnimatePresence>
-                                {isModelDropdownOpen && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        className="absolute bottom-full mb-2 left-0 w-[180px] bg-secondary border border-border rounded-xl shadow-xl overflow-hidden py-1 z-50"
-                                    >
-                                        {models.map((model) => (
-                                            <button
-                                                key={model.id}
-                                                onClick={() => handleModelSelect(model.id)}
-                                                className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-tertiary transition-colors ${selectedModel === model.id ? 'text-blue-400 bg-blue-500/10' : 'text-text'
-                                                    }`}
-                                            >
-                                                <model.Icon size={16} />
-                                                {model.name}
-                                            </button>
-                                        ))}
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
-                    )}
                     <button
                         onClick={isStreaming ? stopGeneration : toggleChatStatus}
                         className={`w-11 h-11 rounded-2xl flex justify-center items-center transition-all ${isStreaming

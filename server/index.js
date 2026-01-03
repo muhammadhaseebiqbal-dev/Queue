@@ -4,6 +4,44 @@ dotenv.config();
 import { Groq } from 'groq-sdk';
 import cors from 'cors';
 import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load Model Config
+const configPath = path.join(__dirname, 'model_config.json');
+let MODEL_INTENTS = [];
+try {
+    const data = fs.readFileSync(configPath, 'utf8');
+    MODEL_INTENTS = JSON.parse(data);
+    console.log(`[Config] Loaded ${MODEL_INTENTS.length} match rules from model_config.json`);
+} catch (err) {
+    console.error(`[Config] Failed to load model_config.json:`, err);
+}
+
+// Helper: Smart Intent Detection
+function detectSmartIntent(text) {
+    if (!text) return MODEL_INTENTS.find(i => i.matchType === 'fallback');
+
+    for (const rule of MODEL_INTENTS) {
+        if (rule.matchType === 'keyword_regex' && rule.keywords) {
+            // Check if any keyword matches
+            const match = rule.keywords.some(keyword => {
+                try {
+                    // Create regex from keyword string
+                    const regex = new RegExp(keyword, 'i');
+                    return regex.test(text);
+                } catch (e) { return false; }
+            });
+            if (match) return rule;
+        }
+    }
+    // Return fallback
+    return MODEL_INTENTS.find(i => i.matchType === 'fallback');
+}
 
 // Route to Routeway (DeepSeek)
 async function getModelCompletionRouteway(req, res, messages, modelKey) {
@@ -82,7 +120,7 @@ const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 } // 10MB Limit per file
 });
-import fs from 'fs';
+
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import { MagicLinkToken } from './models.js'; // Import MagicLinkToken Model
@@ -1096,22 +1134,23 @@ app.get('/stream/:id', async (req, res) => {
             }
         }
 
-        // Get model config
-        const config = MODEL_CONFIGS[modelKey] || MODEL_CONFIGS['llama-3.3-70b'];
-        const resolvedModel = config.model;
+        // SMART INTENT DETECTION (Replacing legacy header/config logic)
+        const lastUserMessage = finalMessages.findLast(m => m.role === 'user')?.content || "";
+        const detectedRule = detectSmartIntent(lastUserMessage);
+        const resolvedModel = detectedRule.model;
 
-        // Log the request
-        console.log(`[Stream API] Request: Model=${modelKey} (Resolved: ${resolvedModel})`);
+        console.log(`[Stream API] Intent: "${detectedRule.intent}" | Model: ${resolvedModel.id} | Provider: ${resolvedModel.provider}`);
 
-        // DEEPSEEK ROUTING
-        if (resolvedModel === 'deepseek-v3.1-terminus:free') {
-            console.log(`[Stream API] Service: ROUTEWAY | Model: ${resolvedModel} | Status: Starting...`);
+        // ROUTEWAY PROVIDER (DeepSeek)
+        if (resolvedModel.provider === 'routeway') {
+            console.log(`[Stream API] Service: ROUTEWAY | Model: ${resolvedModel.id} | Status: Starting...`);
 
             try {
-                const response = await axios.post('https://api.routeway.ai/v1/chat/completions', {
-                    model: resolvedModel,
+                const response = await axios.post(resolvedModel.endpoint, {
+                    model: resolvedModel.id,
                     messages: finalMessages,
-                    stream: true
+                    stream: true,
+                    ...resolvedModel.config
                 }, {
                     headers: {
                         'Authorization': `Bearer ${process.env.ROUTEWAY_API_KEY}`,
@@ -1123,10 +1162,7 @@ app.get('/stream/:id', async (req, res) => {
                 response.data.on('data', (chunk) => {
                     const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
                     for (const line of lines) {
-                        if (line.includes('[DONE]')) {
-                            // Do not close yet, wait for 'done' signal at end
-                            return;
-                        }
+                        if (line.includes('[DONE]')) return;
                         if (line.startsWith('data: ')) {
                             try {
                                 const jsonStr = line.replace('data: ', '');
@@ -1135,40 +1171,33 @@ app.get('/stream/:id', async (req, res) => {
                                 if (content) {
                                     res.write(`data: ${JSON.stringify({ type: 'content', content })}\n\n`);
                                 }
-                            } catch (e) {
-                                // Ignore parse errors for partial chunks
-                            }
+                            } catch (e) { }
                         }
                     }
                 });
 
-                // Wait for stream to finish
                 await new Promise((resolve, reject) => {
                     response.data.on('end', resolve);
                     response.data.on('error', reject);
                 });
-
-                console.log(`[Stream API] Service: ROUTEWAY | Model: ${resolvedModel} | Status: Completed`);
+                console.log(`[Stream API] Service: ROUTEWAY | Status: Completed`);
 
             } catch (error) {
                 console.error(`[Stream API] Service: ROUTEWAY | Error:`, error.message);
-                throw error; // Let outer catch handle it
+                throw error;
             }
 
-        } else {
-            // STANDARD GROQ HANDLER
-            console.log(`[Stream API] Service: GROQ | Model: ${resolvedModel} | Status: Starting...`);
+        }
+        // GROQ PROVIDER (Llama, GPT-OSS)
+        else {
+            console.log(`[Stream API] Service: GROQ | Model: ${resolvedModel.id} | Status: Starting...`);
 
-            // Use Groq for all models
             const chatCompletion = await groq.chat.completions.create({
                 messages: finalMessages,
-                model: resolvedModel,
-                temperature: config.temperature,
-                max_completion_tokens: config.max_completion_tokens,
-                top_p: config.top_p,
+                model: resolvedModel.id,
                 stream: true,
                 stop: null,
-                ...(config.reasoning_effort && { reasoning_effort: config.reasoning_effort })
+                ...resolvedModel.config
             });
 
             for await (const chunk of chatCompletion) {
@@ -1177,12 +1206,11 @@ app.get('/stream/:id', async (req, res) => {
                     res.write(`data: ${JSON.stringify({ type: 'content', content })}\n\n`);
                 }
             }
-            console.log(`[Stream API] Service: GROQ | Model: ${resolvedModel} | Status: Completed`);
+            console.log(`[Stream API] Service: GROQ | Status: Completed`);
         }
 
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
 
-        // Give the client time to process the 'done' message before closing connection
         await new Promise(resolve => setTimeout(resolve, 100));
         res.end();
 
@@ -1368,7 +1396,7 @@ app.delete('/api/session/:sessionId', authMiddleware, async (req, res) => {
 });
 
 // Get Sidebar Data (Projects + Recent Sessions)
-app.get('/api/sidebar/:userId', authMiddleware, async (req, res) => {
+app.get('/api/sidebar/:userId', async (req, res) => {
     try {
         if (!isConnected) {
             const userSessions = memorySessions

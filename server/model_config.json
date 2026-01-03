@@ -1,0 +1,82 @@
+[
+    {
+        "intent": "coding",
+        "description": "Code generation, debugging, and software development tasks.",
+        "matchType": "keyword_regex",
+        "keywords": [
+            "function",
+            "const",
+            "import",
+            "export",
+            "class",
+            "return",
+            "console\\.",
+            "=>",
+            "\\{[\\s\\S]*\\}",
+            "python",
+            "javascript",
+            "typescript",
+            "react",
+            "node",
+            "css",
+            "html",
+            "debug",
+            "fix",
+            "error",
+            "exception",
+            "bug",
+            "code",
+            "script",
+            "api",
+            "endpoint",
+            "json",
+            "database",
+            "sql",
+            "mongo",
+            "query"
+        ],
+        "model": {
+            "id": "deepseek-v3.1-terminus:free",
+            "provider": "routeway",
+            "endpoint": "https://api.routeway.ai/v1/chat/completions",
+            "config": {
+                "temperature": 0.3,
+                "max_completion_tokens": 8000
+            }
+        }
+    },
+    {
+        "intent": "image_generation",
+        "description": "Generating images based on prompts.",
+        "matchType": "keyword_regex",
+        "keywords": [
+            "generate an image",
+            "create a picture",
+            "draw",
+            "visualize",
+            "image of",
+            "photo of"
+        ],
+        "model": {
+            "id": "flux-realism",
+            "provider": "pollinations",
+            "endpoint": "https://image.pollinations.ai/prompt",
+            "config": {}
+        }
+    },
+    {
+        "intent": "general",
+        "description": "General conversation and fallback.",
+        "matchType": "fallback",
+        "keywords": [],
+        "model": {
+            "id": "llama-3.3-70b-versatile",
+            "provider": "groq",
+            "endpoint": "https://api.groq.com/openai/v1/chat/completions",
+            "config": {
+                "temperature": 0.7,
+                "max_completion_tokens": 1024
+            }
+        }
+    }
+]
